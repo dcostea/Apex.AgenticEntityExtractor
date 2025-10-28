@@ -1,0 +1,11 @@
+Subject: Follow-up on Amsterdam Tech Conference 2025
+
+Hi Elena,
+
+It was great meeting you at the Amsterdam Tech Conference last Thursday. I wanted to confirm our next discussion about the AI integration roadmap scheduled for October 28, 2025, at our Rotterdam office.
+Also, could you share the presentation slides that Dr. Michael Anders used during his keynote on optimizing distributed inference? They would help our engineering team prepare for next week's sprint review.
+
+Best regards,
+James Cooper
+Senior Software Architect
+Innovatech Solutions, The Hague

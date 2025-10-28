@@ -1,0 +1,22 @@
+[
+  {
+    "name": "works_for",
+    "description": "A person is employed by or affiliated with an organization (e.g., James Cooper works_for Innovatech Solutions)."
+  },
+  {
+    "name": "located_at",
+    "description": "An organization or event is situated at a location. NEVER reverse this: location does NOT go located_at organization (e.g., Innovatech Solutions located_at The Hague, Amsterdam Tech Conference located_at Amsterdam)."
+  },
+  {
+    "name": "occurs_at",
+    "description": "An event happens at a specific time. NEVER reverse this: temporal does NOT go occurs_at event (e.g., Amsterdam Tech Conference occurs_at last Thursday, discussion occurs_at October 28, 2025)."
+  },
+  {
+    "name": "participates_in",
+    "description": "A person takes part in an event. Extract for all attendees, speakers, and participants. If email mentions meeting someone at an event, both participate (e.g., James Cooper participates_in Amsterdam Tech Conference, Elena participates_in Amsterdam Tech Conference)."
+  },
+  {
+    "name": "part_of",
+    "description": "A smaller entity is a component of a larger entity of the same type (e.g., Rotterdam part_of Netherlands, Sales Department part_of Innovatech Solutions, keynote part_of Amsterdam Tech Conference)."
+  }
+]
