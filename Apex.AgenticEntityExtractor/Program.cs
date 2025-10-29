@@ -45,10 +45,8 @@ static async Task<IChatClient> CreateOllamaChatClientAsync()
 }
 
 // Select one of the chat clients (Ollama or OpenAI)
-var chatClient = await CreateOllamaChatClientAsync();
-//var chatClient = await CreateOpenAIChatClientAsync();
-
-////////////// DEMO - PART 1 ////////////////////////////////////////
+//var chatClient = await CreateOllamaChatClientAsync();
+var chatClient = await CreateOpenAIChatClientAsync();
 
 var entitiesAgent = chatClient.CreateAIAgent(new ChatClientAgentOptions
 {
@@ -105,56 +103,68 @@ WorkflowHelper.PrintColoredLine($"""
     """, ConsoleColor.Green);
 
 var workflow = AgentWorkflowBuilder.BuildSequential(entitiesAgent, relationshipsAgent, diagramBuilderAgent);
-await using StreamingRun run = await InProcessExecution.StreamAsync(workflow, query);
-await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
-// You may comment out (skip) this line for continuing to demo part 2.
-// Do not worry about this worflow because it will get converted into an agent and it has the chance to run below.
-// This iterates through the workflow events.
-await WorkflowHelper.PrintWorkflowExecutionEventsAsync(run);
+// set this flag on false for running only part 1 of the demo, which shows the sequential workflow execution (with events)
+// set this flag on true for running part 2 of the demo, which shows the group chat workflow execution
+var runDemoPart2 = true;
 
+if (!runDemoPart2)
+{
+    // In this demo (part 1) we are going to run a sequential workflow that extracts entities and relationships,
+    // and then builds a mermaid diagram
+    Console.WriteLine("DEMO - PART 1");
 
+    await using StreamingRun run = await InProcessExecution.StreamAsync(workflow, input: query);
+    await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
+    await WorkflowHelper.PrintWorkflowExecutionEventsAsync(run);
+}
+else
+{
+    // In this demo (part 2) we are going to declare two additional agents that will validate and correct diagrams
+    Console.WriteLine("DEMO - PART 2");
 
-////////////// DEMO - PART 2 ////////////////////////////////////////
+    // is convenient to convert the workflow to an agent for easier getting the final result,
+    // but we could also stream the execution as in part 1 and capture the output result
+    var workflowExtractionAgent = workflow.AsAgent();
+    var result = await workflowExtractionAgent.RunAsync(query);
+    await WorkflowHelper.PrintAgentResponseStreamAsync(query, workflowExtractionAgent);
 
-var workflowExtractionAgent = await workflow.AsAgentAsync();
-var result = await workflowExtractionAgent.RunAsync(query);
-////await WorkflowHelper.PrintAgentResponseStreamAsync(query, workflowExtractionAgent);
-
-WorkflowHelper.PrintColoredLine($"""
+    WorkflowHelper.PrintColoredLine($"""
     RESULT:
     {result.Text}
     """, ConsoleColor.Green);
 
-var diagramCorrectorAgent = chatClient.CreateAIAgent(new ChatClientAgentOptions
-{
-    Name = "DiagramCorrectorAgent",
-    Instructions = File.ReadAllText(Path.Combine("Data", "Instructions", "DiagramCorrectorAgent.md")),
-    ChatOptions = new ChatOptions
+    var diagramCorrectorAgent = chatClient.CreateAIAgent(new ChatClientAgentOptions
     {
-        MaxOutputTokens = 1000,
-        Temperature = 0.1F,
-    }
-});
+        Name = "DiagramCorrectorAgent",
+        Instructions = File.ReadAllText(Path.Combine("Data", "Instructions", "DiagramCorrectorAgent.md")),
+        ChatOptions = new ChatOptions
+        {
+            MaxOutputTokens = 1000,
+            Temperature = 0.1F,
+        }
+    });
 
-var validationAgent = chatClient.CreateAIAgent(new ChatClientAgentOptions
-{
-    Name = "ValidationAgent",
-    Instructions = File.ReadAllText(Path.Combine("Data", "Instructions", "ValidationAgent.md")),
-    ChatOptions = new ChatOptions
+    var validationAgent = chatClient.CreateAIAgent(new ChatClientAgentOptions
     {
-        MaxOutputTokens = 1000,
-        Temperature = 0.1F,
-    }
-});
+        Name = "ValidationAgent",
+        Instructions = File.ReadAllText(Path.Combine("Data", "Instructions", "ValidationAgent.md")),
+        ChatOptions = new ChatOptions
+        {
+            MaxOutputTokens = 1000,
+            Temperature = 0.1F,
+        }
+    });
 
-var validationWorkflow = AgentWorkflowBuilder
-    .CreateGroupChatBuilderWith(agents => new RoundRobinGroupChatManager(agents) { MaximumIterationCount = 7 })
-    .AddParticipants(validationAgent, diagramCorrectorAgent)
-    .Build();
+    var validationWorkflow = AgentWorkflowBuilder
+        .CreateGroupChatBuilderWith(agents => new RoundRobinGroupChatManager(agents) { MaximumIterationCount = 7 })
+        .AddParticipants(validationAgent, diagramCorrectorAgent)
+        .Build();
 
-////var followUpQuery = File.ReadAllText(Path.Combine("Data", "Input", "mermaid-sample.md"));
-var followUpQuery = $"""
+    var mermaid = validationWorkflow.ToMermaidString();
+    Console.WriteLine($"Validation Workflow Mermaid Diagram: {mermaid}");
+
+    var followUpQuery = $"""
     ## TASK
     Validate the following Mermaid diagram and respond with the final corrected diagram:
 
@@ -162,6 +172,7 @@ var followUpQuery = $"""
     {result.Text}
     """;
 
-StreamingRun followUpRun = await InProcessExecution.StreamAsync(validationWorkflow, followUpQuery);
-await followUpRun.TrySendMessageAsync(new TurnToken(emitEvents: true));
-await WorkflowHelper.PrintWorkflowExecutionEventsAsync(followUpRun);
+    StreamingRun followUpRun = await InProcessExecution.StreamAsync(validationWorkflow, input: followUpQuery);
+    await followUpRun.TrySendMessageAsync(new TurnToken(emitEvents: true));
+    await WorkflowHelper.PrintWorkflowExecutionEventsAsync(followUpRun);
+}
