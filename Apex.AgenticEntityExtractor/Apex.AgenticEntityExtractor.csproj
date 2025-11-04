@@ -24,22 +24,22 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <None Update="Data\Input\input.txt">
+	  <None Update="Data\Input\AMS Tech Conf.png">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
-	  <None Update="Data\Input\mermaid-sample.md">
+		<None Update="Data\Input\input.txt">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+		<None Update="Data\Input\mermaid-sample.md">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
 	  <None Update="Data\Instructions\EntitiesAgent.md">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
-	  <None Update="Data\Instructions\DiagramCorrectorAgent.md">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-	  </None>
 	  <None Update="Data\Instructions\ValidationAgent.md">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
-	  <None Update="Data\Instructions\DiagramBuilderAgent.md">
+	  <None Update="Data\Instructions\MermaidAgent.md">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
 	  <None Update="Data\Instructions\RelationshipsAgent.md">
@@ -51,9 +51,5 @@
 	  <None Update="Data\Ontology\relationships-ontology.json">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
-	</ItemGroup>
-
-	<ItemGroup>
-	  <Folder Include="Data\Input\" />
 	</ItemGroup>
 </Project>

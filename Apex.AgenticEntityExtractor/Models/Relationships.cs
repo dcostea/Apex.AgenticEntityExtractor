@@ -1,6 +1,6 @@
 ﻿using System.Text.Json.Serialization;
 
-namespace AgenticEntityExtractor.Models;
+namespace Apex.AgenticEntityExtractor.Models;
 
 public class Relationships
 {

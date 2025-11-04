@@ -1,6 +1,7 @@
-﻿using System.Text.Json.Serialization;
+﻿using Apex.AgenticEntityExtractor.Models;
+using System.Text.Json.Serialization;
 
-namespace AgenticEntityExtractor.Models;
+namespace Apex.Apex.AgenticEntityExtractor.Models;
 
 public class Entities
 {

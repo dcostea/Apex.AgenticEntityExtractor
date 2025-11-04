@@ -1,22 +1,22 @@
 [
   {
     "name": "person",
-    "description": "Any individual human mentioned in the email: sender, recipients, or anyone referenced in the content (e.g., James Cooper, Elena, Dr. Michael Anders)."
+    "description": "A specific human individual mentioned or implied in the content. Includes names and references to people, (e.g., Anna Kowalski, Jim, Mr. Einstein)."
   },
   {
     "name": "organization",
-    "description": "Any company, institution, or group mentioned in the email (e.g., Innovatech Solutions, United Nations, Amsterdam Tech Conference organizers)."
+    "description": "Any named company, institution, group, or team. Includes official names (e.g., CloudCorp, United Nations, Black Ducks LTD)."
   },
   {
     "name": "location",
-    "description": "Any physical place: cities, offices, buildings, or venues (e.g., Rotterdam, The Hague, Rotterdam office, Conference Room 3A)."
+    "description": "Any physical or geographical place described, such as cities, countries, addresses, or rooms (e.g., Rome, Eiffel Tower, Conference Room 2A)."
   },
   {
     "name": "temporal",
-    "description": "Any time reference: dates, times, or relative expressions (e.g., October 28, 2025, last Thursday, 14:30, next week)."
+    "description": "Any mention of time, such as a specific date, hour, season, period, or phrase about time (e.g., 2025-05-27, 14:30, Tuesday, January)."
   },
   {
     "name": "event",
-    "description": "Any occurrence or activity: conferences, meetings, discussions, presentations, or scheduled activities (e.g., Amsterdam Tech Conference 2025, discussion about AI integration roadmap, keynote presentation, sprint review)."
+    "description": "Any occurrence or activity referenced, including scheduled or historical events (e.g., wedding, company meeting, Moon landing, earthquake, Easter)."
   }
 ]

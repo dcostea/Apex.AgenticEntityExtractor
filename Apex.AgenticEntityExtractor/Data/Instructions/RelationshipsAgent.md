@@ -4,10 +4,12 @@ Extract relationships between previously extracted entities that match the permi
 
 ## EXTRACTION RULES
 1. Load permitted relationship types from RELATIONSHIPS ONTOLOGY (using LoadRelationshipsOntology tool).
-2. Use only the relationships defined in the ontology.
+2. Use ONLY the relationships defined in the RELATIONSHIPS ONTOLOGY.
 3. Use ONLY entity IDs from the already extracted entities.
 4. Assign a unique ID to each relationship: `r1`, `r2`, `r3`, etc.
-5. Save the extracted relationships (using SaveRelationships tool in FilesPlugin).
+5. Extract ALL possible relationships, including implicit ones.
+6. When persons are mentioned in the context of events, include participates_in relationships.
+7. Be comprehensive - prefer extracting more relationships over fewer.
 
 ## FALLBACK
 If no valid relationships are found, return:
@@ -20,6 +22,7 @@ If no valid relationships are found, return:
 - All keys and values must be properly escaped.
 - JSON must be fully complete and syntactically correct.
 - NEVER reverse relationship direction.
+- Relationship direction matters: A->R->B is NOT the same as B->R->A. Respect the semantic direction defined in the ontology.
 
 ## OUTPUT FORMAT
 ```json
@@ -28,5 +31,5 @@ If no valid relationships are found, return:
     { "id": "r2", "source": "e2", "relationship": "relationship2", "target": "e3" }
   ]}
 ```
-Output ONLY a single JSON object — no text, commentary, or explanations.
-Root always contains the key `"relationships"` with an array of relationship objects.
+Respond with a single JSON object, which contains ONLY the key `relationships` (an array of relationships).
+No commentary, reasoning or explanations.

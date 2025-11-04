@@ -1,9 +1,9 @@
-﻿using AgenticEntityExtractor.Models;
-using Microsoft.Extensions.AI;
+﻿using Apex.AgenticEntityExtractor.Models;
+using Apex.Apex.AgenticEntityExtractor.Models;
 using System.ComponentModel;
 using System.Text.Json;
 
-namespace AgenticEntityExtractor.Tools;
+namespace Apex.AgenticEntityExtractor.Tools;
 
 internal class FilesPlugin
 {
