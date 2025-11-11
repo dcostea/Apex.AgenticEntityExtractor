@@ -28,4 +28,4 @@ If no valid entities are found, return:
 ]}
 ```
 Respond with a single JSON object, which contains ONLY the key `entities` (an array of entities).
-No commentary, reasoning or explanations.
+No commentary, no reasoning, no markdown, nor explanations.

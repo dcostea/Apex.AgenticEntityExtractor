@@ -32,4 +32,4 @@ If no valid relationships are found, return:
   ]}
 ```
 Respond with a single JSON object, which contains ONLY the key `relationships` (an array of relationships).
-No commentary, reasoning or explanations.
+No commentary, no reasoning, no markdown, nor explanations.

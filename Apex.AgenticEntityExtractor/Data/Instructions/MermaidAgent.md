@@ -35,4 +35,5 @@ e1 -->|works_for| e2
 ```
 
 ## OUTPUT FORMAT
-Respond ONLY with one Mermaid JS graph (no subgraphs, no text, commentary, or explanations).
+Respond ONLY with one Mermaid JS graph.
+No subgraphs, no styling (no class or classDef), no markdown, no reasoning, nor explanations.

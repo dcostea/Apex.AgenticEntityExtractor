@@ -1,104 +1,94 @@
-﻿using Apex.AgenticEntityExtractor.Helpers;
+﻿using Apex.AgenticEntityExtractor.Builders;
 using Microsoft.Agents.AI;
+using Microsoft.Agents.AI.DevUI;
+using Microsoft.Agents.AI.Hosting;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
+using System.Text.Json.Serialization;
 
-// Select configuration for agent execution
-bool useConcurrentEntityAgents = false; // true means running 3 entity agents concurrently
-bool useConcurrentRelationshipAgents = false; // true means running 3 relationship agents concurrently
-bool useGroupChatAgents = false; // true means using group chat for mermaid diagram generation
+var builder = WebApplication.CreateBuilder(args);
 
-// Select one of the chat clients (Ollama or OpenAI)
-bool useSelfHostedOllama = true; // Set to true to use Ollama, false to use OpenAI
-IChatClient chatClient = useSelfHostedOllama
-    ? await ChatClientHelper.BuildOllamaChatClientAsync()
-    : await ChatClientHelper.BuildOpenAIChatClientAsync();
-
-// Run concurrent or single agents for each step
-AIAgent entitiesAgent; 
-if (useConcurrentEntityAgents)
+// CONFIGURE CHAT BUILDER
+builder.Services.AddSingleton<IExtractorChatClientBuilder, ExtractorChatClientBuilder>();
+builder.Services.AddChatClient(sp =>
 {
-    Console.WriteLine("Using Concurrent Entity Agents");
-    var entitiesAgent1 = AgentHelper.BuildEntitiesAgent(chatClient);
-    var entitiesAgent2 = AgentHelper.BuildEntitiesAgent(chatClient);
-    var entitiesAgent3 = AgentHelper.BuildEntitiesAgent(chatClient);
-    var entitiesWorkflow = AgentWorkflowBuilder.BuildConcurrent(
-        [entitiesAgent1, entitiesAgent2, entitiesAgent3],
-        WorkflowHelper.AggregateEntities);
-    entitiesAgent = entitiesWorkflow.AsAgent(name: "EntitiesTripleAgent", 
-        description: "Aggregates the result from Entity Agents");
-}
-else
+    var extractorChatClientBuilder = sp.GetRequiredService<IExtractorChatClientBuilder>();
+    if (builder.Configuration.GetValue<bool>("UseSelfHostedOllama")) 
+    {
+        return extractorChatClientBuilder.BuildOllamaChatClient();
+    }
+    else 
+    {
+        return extractorChatClientBuilder.BuildOpenAIChatClient();   
+    }
+});
+
+// CONFIGURE AGENTS AND WORKFLOWS
+builder.Services.AddSingleton<IExtractorAgentBuilder, ExtractorAgentBuilder>();
+builder.AddAIAgent("EntitiesAgent", (sp, _) => 
 {
-    Console.WriteLine("Using Single Entity Agent");
-    entitiesAgent = AgentHelper.BuildEntitiesAgent(chatClient);
-}
-
-// Run concurrent or single agents for each step
-AIAgent relationshipsAgent;
-if (useConcurrentRelationshipAgents)
+    //_logger.LogInformation("Using Single Entities Agent");
+    var extractorAgentBuilder = sp.GetRequiredService<IExtractorAgentBuilder>();
+    return extractorAgentBuilder.BuildEntitiesAgent();
+});
+builder.AddAIAgent("RelationshipsAgent", (sp, _) =>
 {
-    Console.WriteLine("Using Concurrent Relationships Agents");
-    var relationshipsAgent1 = AgentHelper.BuildRelationshipsAgent(chatClient);
-    var relationshipsAgent2 = AgentHelper.BuildRelationshipsAgent(chatClient);
-    var relationshipsAgent3 = AgentHelper.BuildRelationshipsAgent(chatClient);
-    var relationshipsWorkflow = AgentWorkflowBuilder.BuildConcurrent(
-        [relationshipsAgent1, relationshipsAgent2, relationshipsAgent3],
-        WorkflowHelper.AggregateRelationships);
-    relationshipsAgent = relationshipsWorkflow.AsAgent(name: "RelationshipsTripleAgent", 
-        description: "Aggregates the result from Relationship Agents");
-}
-else
+    //_logger.LogInformation("Using Single Relationships Agent");
+    var extractorAgentBuilder = sp.GetRequiredService<IExtractorAgentBuilder>();
+    return extractorAgentBuilder.BuildRelationshipsAgent();
+});
+builder.AddAIAgent("MermaidAgent", (sp, _) =>
 {
-    Console.WriteLine("Using Single Relationships Agent");
-    relationshipsAgent = AgentHelper.BuildRelationshipsAgent(chatClient);
-}
-
-// Run group chat or single agent for mermaid diagram generation
-AIAgent mermaidAgent;
-if (useGroupChatAgents)
+    //_logger.LogInformation("Using Single Mermaid Agent");
+    var extractorAgentBuilder = sp.GetRequiredService<IExtractorAgentBuilder>();
+    return extractorAgentBuilder.BuildMermaidAgent();
+});
+builder.AddWorkflow("ExtractionWorkflow", (sp, name) =>
 {
-    Console.WriteLine("Using Group Chat Mermaid Agents");
-    var mermaidBuilderAgent = AgentHelper.BuildMermaidAgent(chatClient);
-    var validationAgent = AgentHelper.BuildValidationAgent(chatClient);
-    var mermaidWorkflow = AgentWorkflowBuilder
-        .CreateGroupChatBuilderWith(agents => new RoundRobinGroupChatManager(agents) { MaximumIterationCount = 7 })
-        .AddParticipants(mermaidBuilderAgent, validationAgent)
-        .Build();
-    mermaidAgent = mermaidWorkflow.AsAgent(name: "MermaidAutocorrectiveAgent", 
-        description: "Negotiates a valid mermaid diagram");
-}
-else
+    List<AIAgent> agents = [
+        sp.GetRequiredKeyedService<AIAgent>("EntitiesAgent"),
+        sp.GetRequiredKeyedService<AIAgent>("RelationshipsAgent"),
+        sp.GetRequiredKeyedService<AIAgent>("MermaidAgent")
+    ];
+    return AgentWorkflowBuilder.BuildSequential(name, agents);
+})
+.AddAsAIAgent();
+
+// CONFIGURE CONTROLLERS, SWAGGER, AND DEVUI
+builder.Services.AddControllers().AddJsonOptions(options =>
 {
-    Console.WriteLine("Using Single Mermaid Agent");
-    mermaidAgent = AgentHelper.BuildMermaidAgent(chatClient);
+    options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter());
+});
+
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
+builder.AddOpenAIResponses();
+builder.AddOpenAIConversations();
+
+var app = builder.Build();
+
+app.MapOpenAIResponses();
+app.MapOpenAIConversations();
+
+app.MapControllers();
+
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+    app.MapDevUI();
 }
 
-// Build main workflow
-var workflow = AgentWorkflowBuilder.BuildSequential(entitiesAgent, relationshipsAgent, mermaidAgent);
+app.UseHttpsRedirection();
 
-// Prepare input message with text and image
-var input = File.ReadAllText(Path.Combine("Data", "Input", "input.txt"));
-var query = $"""
-    ## CONTEXT
-    Input:
-    ```
-    {input}
-    ```
-    """;
-byte[] imageBytes = File.ReadAllBytes(Path.Combine("Data", "Input", "AMS Tech Conf.png"));
-ChatMessage msg = new(ChatRole.User, [
-    new TextContent(query),
-    new DataContent(imageBytes, "image/png")
-]);
+app.Lifetime.ApplicationStarted.Register(() =>
+{
+    foreach (var url in app.Urls)
+    {
+        Console.WriteLine($"Listening on: {url}/devui");
+        Console.WriteLine("Press Ctrl+C to stop the server.");
+    }
+});
 
-WorkflowHelper.PrintColoredLine($"""
-    QUERY:
-
-    {query}
-    """, ConsoleColor.Green);
-
-// Execute the workflow
-await using StreamingRun run = await InProcessExecution.StreamAsync(workflow, input: msg);
-await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
-await WorkflowHelper.PrintWorkflowExecutionEventsAsync(run);
+app.Run();
