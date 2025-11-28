@@ -1,6 +1,4 @@
-﻿using Apex.AgenticEntityExtractor.Models;
-using Apex.Apex.AgenticEntityExtractor.Models;
-using Microsoft.Agents.AI;
+﻿using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 using System.Diagnostics;
@@ -11,78 +9,44 @@ namespace Apex.AgenticEntityExtractor.Helpers;
 
 public static class WorkflowHelper
 {
-    public static async Task PrintWorkflowFinalMessageAsync(StreamingRun run)
+    public static async Task PrintAgentResponseStreamAsync(AIAgent agent, ChatMessage message)
     {
-        await foreach (var evt in run.WatchStreamAsync())
-        {
-            if (evt is WorkflowOutputEvent outputEvent)
-            {
-                PrintColoredLine($"{outputEvent.SourceId}: {outputEvent.As<List<ChatMessage>>()?.LastOrDefault()?.Text}", ConsoleColor.Yellow);
-            }
-        }
-    }
+        PrintExecutionHeader("AGENT RESPONSE STREAM");
 
-    public static async Task PrintAgentResponseStreamAsync(string query, AIAgent workflowAgent)
-    {
+        ConsoleHelper.PrintColoredLine($"""
+            QUERY:
+
+            {message.Text}
+            """, ConsoleColor.Green);
+
         string? lastAuthor = null;
-        await foreach (var update in workflowAgent.RunStreamingAsync(query))
+        await foreach (var update in agent.RunStreamingAsync(message))
         {
             // when new author, print author header
             if (lastAuthor != update.AuthorName)
             {
                 lastAuthor = update.AuthorName;
-                PrintColoredLine($"\n\n** {update.AuthorName} **", ConsoleColor.Gray);
+                ConsoleHelper.PrintColoredLine($"** {update.AuthorName} **", ConsoleColor.Yellow);
             }
 
-            PrintColored(update.Text, ConsoleColor.Green);
+            ConsoleHelper.PrintColored(update.Text, ConsoleColor.Yellow);
         }
     }
 
-    public static void PrintTools(List<ChatMessage> messages)
-    {
-        foreach (var message in messages)
-        {
-            if (message.Role == ChatRole.Assistant)
-            {
-                foreach (var content in message.Contents)
-                {
-                    if (content is FunctionCallContent toolCall)
-                    {
-                        var arguments = toolCall.Arguments is null ? "" : JsonSerializer.Serialize(toolCall.Arguments);
-                        Console.WriteLine($"TOOL CALL [{toolCall.CallId}] {toolCall.Name} {arguments}");
-                    }
-                }
-            }
-            if (message.Role == ChatRole.Tool)
-            {
-                foreach (var content in message.Contents)
-                {
-                    if (content is FunctionResultContent toolResult)
-                    {
-                        var annotations = toolResult.Annotations is null ? "" : JsonSerializer.Serialize(toolResult.Annotations);
-                        Console.WriteLine($"TOOL RESP [{toolResult.CallId}] {toolResult.Result} {annotations}");
-                    }
-                }
-            }
-        }
-        Console.ResetColor();
-    }
-
-    public static async Task PrintToMarkdownAsync(Workflow workflow) 
-    {
-        var mermaid = workflow.ToMermaidString();
-        var markdown = $"# Workflow Diagram\n\n```mermaid\n{mermaid}\n```\n";
-        var projectDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", ".."));
-        var filePath = Path.Combine(projectDir, "workflow.md");
-        await File.WriteAllTextAsync(filePath, markdown);
-    }
-
-    public static async Task PrintWorkflowExecutionEventsAsync(StreamingRun run)
+    public static async Task PrintWorkflowExecutionEventsAsync(StreamingRun run, ChatMessage message, string header)
     {
         string? lastExecutorId = null;
         var workflowStopwatch = Stopwatch.StartNew();
         var executorTimings = new Dictionary<string, Stopwatch>();
         var executorDurations = new Dictionary<string, TimeSpan>();
+
+        PrintExecutionHeader(header);
+
+        ConsoleHelper.PrintColoredLine($"""
+            QUERY:
+
+            {message.Text}
+            """, ConsoleColor.Green);
 
         await foreach (WorkflowEvent evt in run.WatchStreamAsync())
         {
@@ -93,7 +57,7 @@ public static class WorkflowHelper
                     PrintEventWithData(evt);
                     if (stepStarted.Data is SuperStepStartInfo startInfo)
                     {
-                        PrintColoredLine($"Sending Executors: {string.Join(", ", startInfo.SendingExecutors.Select(s => s.Split('_')[0]))}", ConsoleColor.Yellow);
+                        ConsoleHelper.PrintColoredLine($"Sending Executors: {string.Join(", ", startInfo.SendingExecutors.Select(s => s.Split('_')[0]))}", ConsoleColor.Yellow);
                     }
                     break;
 
@@ -101,7 +65,7 @@ public static class WorkflowHelper
                     PrintEventWithData(evt);
                     if (stepCompleted.Data is SuperStepCompletionInfo completionInfo)
                     {
-                        PrintColoredLine($"Activated Executors: {string.Join(", ", completionInfo.ActivatedExecutors.Select(s => s.Split('_')[0]))}", ConsoleColor.Yellow);
+                        ConsoleHelper.PrintColoredLine($"Activated Executors: {string.Join(", ", completionInfo.ActivatedExecutors.Select(s => s.Split('_')[0]))}", ConsoleColor.Yellow);
                     }
                     Console.WriteLine();
                     break;
@@ -173,14 +137,14 @@ public static class WorkflowHelper
                     return;
 
                 case WorkflowErrorEvent error:
-                    PrintColoredLine($"[{evt.GetType().Name}]", ConsoleColor.Red);
+                    ConsoleHelper.PrintColoredLine($"[{evt.GetType().Name}]", ConsoleColor.Red);
                     Console.WriteLine((error.Data as TargetInvocationException)?.Message);
                     workflowStopwatch.Stop();
                     PrintExecutionSummary(executorDurations, workflowStopwatch.Elapsed);
                     break;
 
                 default:
-                    PrintColoredLine($"[{evt.GetType().Name}]", ConsoleColor.Red);
+                    ConsoleHelper.PrintColoredLine($"[{evt.GetType().Name}]", ConsoleColor.Red);
                     Console.WriteLine(JsonSerializer.Serialize(evt));
                     break;
             }
@@ -190,104 +154,89 @@ public static class WorkflowHelper
         PrintExecutionSummary(executorDurations, workflowStopwatch.Elapsed);
     }
 
-    public static List<ChatMessage> AggregateRelationships(IList<List<ChatMessage>> aggregateResults)
+    public static async Task PrintWorkflowFinalMessageAsync(StreamingRun run, ChatMessage message, string header)
     {
-        var allRelationships = new List<Relationship>();
+        PrintExecutionHeader(header);
 
-        foreach (var result in aggregateResults)
+        ConsoleHelper.PrintColoredLine($"""
+            QUERY:
+
+            {message.Text}
+            """, ConsoleColor.Green);
+
+        await foreach (var evt in run.WatchStreamAsync())
         {
-            try
+            if (evt is WorkflowOutputEvent outputEvent)
             {
-                // Remove markdown code fences
-                var text = result.Last().Text.Trim();
-                if (text.StartsWith("```json", StringComparison.OrdinalIgnoreCase))
-                    text = text[7..];
-                else if (text.StartsWith("```"))
-                    text = text[3..];
-                if (text.EndsWith("```"))
-                    text = text[..^3];
-
-                var relationships = JsonSerializer.Deserialize<Relationships>(text.Trim());
-                if (relationships?.Items != null)
-                    allRelationships.AddRange(relationships.Items);
+                ConsoleHelper.PrintColoredLine($"{outputEvent.SourceId}: {outputEvent.As<List<ChatMessage>>()?.LastOrDefault()?.Text}", ConsoleColor.Yellow);
             }
-            catch (JsonException) { }
         }
-
-        var uniqueRelationships = allRelationships
-            .GroupBy(r => new { r.Source, r.RelationshipType, r.Target })
-            .Select(g => g.First())
-            .ToList();
-
-        var unifiedRelationships = new Relationships { Items = uniqueRelationships };
-        var jsonOutput = JsonSerializer.Serialize(unifiedRelationships, new JsonSerializerOptions { WriteIndented = true });
-
-        return [new ChatMessage(ChatRole.Assistant, $"```json{jsonOutput}```")];
     }
 
-    public static List<ChatMessage> AggregateEntities(IList<List<ChatMessage>> aggregateResults)
-    {
-        var allEntities = new List<Entity>();
 
-        foreach (var result in aggregateResults)
+    public static void PrintTools(List<ChatMessage> messages)
+    {
+        foreach (var message in messages)
         {
-            try
+            if (message.Role == ChatRole.Assistant)
             {
-                // Remove markdown code fences
-                var text = result.Last().Text.Trim();
-                if (text.StartsWith("```json", StringComparison.OrdinalIgnoreCase))
-                    text = text[7..];
-                else if (text.StartsWith("```"))
-                    text = text[3..];
-                if (text.EndsWith("```"))
-                    text = text[..^3];
-
-                var entities = JsonSerializer.Deserialize<Entities>(text.Trim());
-                if (entities?.Items != null)
-                    allEntities.AddRange(entities.Items);
+                foreach (var content in message.Contents)
+                {
+                    if (content is FunctionCallContent toolCall)
+                    {
+                        var arguments = toolCall.Arguments is null ? "" : JsonSerializer.Serialize(toolCall.Arguments);
+                        ConsoleHelper.PrintColoredLine($"TOOL CALL [{toolCall.CallId}] {toolCall.Name} {arguments}", ConsoleColor.Blue);
+                    }
+                }
             }
-            catch (JsonException) { }
+            if (message.Role == ChatRole.Tool)
+            {
+                foreach (var content in message.Contents)
+                {
+                    if (content is FunctionResultContent toolResult)
+                    {
+                        var annotations = toolResult.Annotations is null ? "" : JsonSerializer.Serialize(toolResult.Annotations);
+                        ConsoleHelper.PrintColoredLine($"TOOL RESP [{toolResult.CallId}] {toolResult.Result} {annotations}", ConsoleColor.Blue);
+                    }
+                }
+            }
         }
-
-        var uniqueEntities = allEntities
-            .GroupBy(e => new { e.EntityType, e.EntityValue })
-            .Select(g => g.First())
-            .ToList();
-
-        var unifiedEntities = new Entities { Items = uniqueEntities };
-        var jsonOutput = JsonSerializer.Serialize(unifiedEntities, new JsonSerializerOptions { WriteIndented = true });
-
-        return [new ChatMessage(ChatRole.Assistant, $"```json{jsonOutput}```")];
-    }
-
-    public static void PrintColoredLine(string text, ConsoleColor color)
-    {
-        Console.ForegroundColor = color;
-        Console.WriteLine(text);
         Console.ResetColor();
     }
 
-    public static void PrintColored(string text, ConsoleColor color)
+    public static async Task PrintToMarkdownAsync(Workflow workflow)
     {
-        Console.ForegroundColor = color;
-        Console.Write(text);
-        Console.ResetColor();
+        var mermaid = workflow.ToMermaidString();
+        var markdown = $"# Workflow Diagram\n\n```mermaid\n{mermaid}\n```\n";
+        var projectDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", ".."));
+        var filePath = Path.Combine(projectDir, "workflow.md");
+        await File.WriteAllTextAsync(filePath, markdown);
+    }
+
+
+    // Private helper methods
+
+    private static void PrintExecutionHeader(string header)
+    {
+        Console.WriteLine();
+        ConsoleHelper.PrintColoredLine($"***** {header} ************************************************************************************", ConsoleColor.Yellow);
+        Console.WriteLine();
     }
 
     // Private helper methods
     private static void PrintStepHeader(int stepNumber)
     {
-        Console.WriteLine($"***** Step: {stepNumber} *************************************************************************************************");
+        ConsoleHelper.PrintColoredLine($"***** STEP: {stepNumber} *************************************************************************************************", ConsoleColor.Yellow);
     }
 
     private static void PrintEventWithData(WorkflowEvent evt)
     {
-        PrintColored($"[{evt.GetType().Name}] ", ConsoleColor.DarkGray);
+        ConsoleHelper.PrintColored($"[{evt.GetType().Name}] ", ConsoleColor.DarkGray);
     }
 
     private static void PrintEventWithExecutor(WorkflowEvent evt, string executorId)
     {
-        PrintColoredLine($"\n[{evt.GetType().Name}] {executorId.Split('_')[0]}", ConsoleColor.DarkGray);
+        ConsoleHelper.PrintColoredLine($"\n[{evt.GetType().Name}] {executorId.Split('_')[0]}", ConsoleColor.DarkGray);
     }
 
     private static void PrintEventWithSerializedData(WorkflowEvent evt)
@@ -299,80 +248,73 @@ public static class WorkflowHelper
             RequestInfoEvent rie => rie.Data,
             _ => null
         };
-        PrintColoredLine($"[{evt.GetType().Name}] {JsonSerializer.Serialize(data)}", ConsoleColor.DarkGray);
+        ConsoleHelper.PrintColoredLine($"[{evt.GetType().Name}] {JsonSerializer.Serialize(data)}", ConsoleColor.DarkGray);
     }
 
     private static bool PrintRunUpdateEvent(AgentRunUpdateEvent e, ref string? lastExecutorId)
     {
         if (string.IsNullOrEmpty(e.Update.Text))
         {
-            PrintToolCalls(e.Update.Contents.OfType<FunctionCallContent>());
+            // Tool calls are logged by the FunctionCallMiddleware with cache status
             return false;
         }
 
-        if (e.ExecutorId != lastExecutorId)
+        // Use AuthorName if available (for group chat agents), otherwise use ExecutorId
+        string agentIdentifier = !string.IsNullOrEmpty(e.Update.AuthorName) 
+            ? e.Update.AuthorName 
+            : e.ExecutorId.Split('_')[0];
+
+        if (agentIdentifier != lastExecutorId)
         {
-            lastExecutorId = e.ExecutorId;
+            lastExecutorId = agentIdentifier;
             Console.WriteLine();
-            PrintColoredLine($"[AgentRunUpdateEvent] {e.ExecutorId.Split('_')[0]}:", ConsoleColor.DarkGray);
+            ConsoleHelper.PrintColoredLine($"[{agentIdentifier}]:", ConsoleColor.Yellow);
             Console.WriteLine();
         }
 
-        PrintColored(e.Update.Text, ConsoleColor.Green);
+        ConsoleHelper.PrintColored(e.Update.Text, ConsoleColor.Green);
 
         return true;
     }
 
-    private static void PrintToolCalls(IEnumerable<FunctionCallContent> calls)
-    {
-        if (!calls.Any()) return;
-
-        Console.WriteLine();
-        foreach (var call in calls)
-        {
-            PrintColoredLine($"[TOOL CALL: {call.Name}] with arguments: {JsonSerializer.Serialize(call.Arguments)}", ConsoleColor.Blue);
-
-            if (call.Arguments?.TryGetValue("reasonForHandoff", out var reason) == true) 
-            {
-                PrintColoredLine($"  Handoff Reason: {reason}", ConsoleColor.Yellow);
-            }
-        }
-    }
-
     private static void PrintWorkflowOutput(WorkflowOutputEvent output)
     {
-        PrintColoredLine($"[{output.GetType().Name}] {output.SourceId}", ConsoleColor.DarkGray);
-        Console.WriteLine("\nRESPONSE:\n");
+        ConsoleHelper.PrintColoredLine($"[{output.GetType().Name}] {output.SourceId}", ConsoleColor.DarkGray);
+        ConsoleHelper.PrintColoredLine("\nRESPONSE:\n", ConsoleColor.Yellow);
 
-        var final = output.As<List<ChatMessage>>()?.LastOrDefault()?.Text;
+        var messages = output.As<List<ChatMessage>>();
+        var final = messages?.LastOrDefault()?.Text;
         if (!string.IsNullOrWhiteSpace(final))
         {
-            PrintColoredLine(final, ConsoleColor.Yellow);
+            ConsoleHelper.PrintColoredLine(final, ConsoleColor.Yellow);
+        }
+        else
+        {
+            ConsoleHelper.PrintColoredLine("WARNING: No final message text found!", ConsoleColor.Red);
         }
 
-        Console.WriteLine("***** Run Complete *************************************************************************************************");
+        ConsoleHelper.PrintColoredLine("***** Run Complete *************************************************************************************************", ConsoleColor.Yellow);
         Console.WriteLine();
     }
 
     private static void PrintExecutionSummary(Dictionary<string, TimeSpan> executorDurations, TimeSpan totalTime)
     {
-        Console.WriteLine();
-        PrintColoredLine("***** Execution Summary *************************************************************************************************", ConsoleColor.Magenta);
+        ConsoleHelper.PrintColoredLine("***** Execution Summary *************************************************************************************************", ConsoleColor.Yellow);
         Console.WriteLine();
         
         if (executorDurations.Count != 0)
         {
-            Console.WriteLine("Executor/Agent Execution Times:");
-            foreach (var kvp in executorDurations.OrderByDescending(x => x.Value))
+            ConsoleHelper.PrintColoredLine("Executor/Agent Execution Times:", ConsoleColor.Yellow);
+            foreach (var kvp in executorDurations)
             {
                 var executorName = kvp.Key.Split('_')[0];
-                Console.WriteLine($"  {executorName}: {kvp.Value.TotalSeconds:F2}s ({kvp.Value.TotalMilliseconds:F0}ms)");
+                ConsoleHelper.PrintColoredLine($"  {executorName}: {kvp.Value.TotalSeconds:F2}s", ConsoleColor.Yellow);
             }
             Console.WriteLine();
         }
 
-        Console.WriteLine($"TOTAL Workflow Execution Time: {totalTime.TotalSeconds:F2}s ({totalTime.TotalMilliseconds:F0}ms)");
-        Console.WriteLine("***** End Summary *************************************************************************************************");
+        ConsoleHelper.PrintColoredLine($"TOTAL Workflow Execution Time: {totalTime.TotalSeconds:F2}s", ConsoleColor.Yellow);
+        ConsoleHelper.PrintColoredLine("***** End Summary *************************************************************************************************", ConsoleColor.Yellow);
         Console.WriteLine();
     }
 }

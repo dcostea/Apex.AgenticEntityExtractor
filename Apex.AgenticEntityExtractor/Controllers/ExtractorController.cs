@@ -1,5 +1,8 @@
-﻿using Apex.AgenticEntityExtractor.Helpers;
+﻿using Apex.AgenticEntityExtractor.Agents;
+using Apex.AgenticEntityExtractor.Helpers;
 using Apex.AgenticEntityExtractor.Models;
+using Apex.AgenticEntityExtractor.Workflows;
+using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.AI;
@@ -8,17 +11,16 @@ namespace Apex.AgenticEntityExtractor.Controllers;
 
 [ApiController]
 [Route("[controller]")]
-public class ExtractorController(IServiceProvider sp) : ControllerBase
+public class ExtractorController(IExtractorWorkflowBuilder extractorWorkflowBuilder, IExtractorAgentsBuilder extractorAgentsBuilder) : ControllerBase
 {
-    [HttpPost("/extract")]
-    public async Task<IActionResult> RunExtractionWorkflowAsync()
+    [HttpPost("/extract/agent")]
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> RunExtractionAgentAsync([FromForm] ExtractionRequest request)
     {
         try
         {
-            var workflow = sp.GetRequiredKeyedService<Workflow>("ExtractionWorkflow");
-
             // Prepare input message with text and image
-            var input = System.IO.File.ReadAllText(Path.Combine("Data", "Input", "input.txt"));
+            var input = request.InputText ?? System.IO.File.ReadAllText(Path.Combine("Data", "Input", "input.txt"));
             var query = $"""
                 ## CONTEXT
                 Input:
@@ -26,23 +28,193 @@ public class ExtractorController(IServiceProvider sp) : ControllerBase
                 {input}
                 ```
                 """;
-            byte[] imageBytes = System.IO.File.ReadAllBytes(Path.Combine("Data", "Input", "AMS Tech Conf.png"));
-            ChatMessage userMessage = new(ChatRole.User, 
+
+            byte[] imageBytes;
+            string contentType;
+            if (request.InputImage != null && request.InputImage.Length > 0)
+            {
+                using var memoryStream = new MemoryStream();
+                await request.InputImage.CopyToAsync(memoryStream);
+                imageBytes = memoryStream.ToArray();
+                contentType = request.InputImage.ContentType;
+            }
+            else
+            {
+                imageBytes = System.IO.File.ReadAllBytes(Path.Combine("Data", "Input", "input.png"));
+                contentType = "image/png";
+            }
+
+            ChatMessage userMessage = new(ChatRole.User,
             [
                 new TextContent(query),
-                new DataContent(imageBytes, "image/png")
+                new DataContent(imageBytes, contentType)
             ]);
 
-            WorkflowHelper.PrintColoredLine($"""
-                QUERY:
+            // Build the "god" agent
+            AIAgent extractorAgent = extractorAgentsBuilder.BuildExtractorAgent();
 
-                {query}
-                """, ConsoleColor.Green);
+            // Execute the agent and print the output
+            await WorkflowHelper. PrintAgentResponseStreamAsync(extractorAgent, userMessage);
 
-            // Execute the workflow
-            await using StreamingRun run = await InProcessExecution.StreamAsync(workflow, input: userMessage);
+            return Ok();
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
+
+    [HttpPost("/extract/workflow/sequence")]
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> RunExtractionWorkflowAsync([FromForm] ExtractionRequest request)
+    {
+        try
+        {
+            // Prepare input message with text and image
+            var input = request.InputText ?? System.IO.File.ReadAllText(Path.Combine("Data", "Input", "input.txt"));
+            var query = $"""
+                ## CONTEXT
+                Input:
+                ```
+                {input}
+                ```
+                """;
+
+            byte[] imageBytes;
+            string contentType;
+            if (request.InputImage != null && request.InputImage.Length > 0)
+            {
+                using var memoryStream = new MemoryStream();
+                await request.InputImage.CopyToAsync(memoryStream);
+                imageBytes = memoryStream.ToArray();
+                contentType = request.InputImage.ContentType;
+            }
+            else
+            {
+                imageBytes = System.IO.File.ReadAllBytes(Path.Combine("Data", "Input", "input.png"));
+                contentType = "image/png";
+            }
+
+            ChatMessage userMessage = new(ChatRole.User,
+            [
+                new TextContent(query),
+                new DataContent(imageBytes, contentType)
+            ]);
+
+            // Build the main workflow
+            Workflow mainWorkflow = extractorWorkflowBuilder.BuildMainWorkflow();
+            await using StreamingRun run = await InProcessExecution.StreamAsync(mainWorkflow, userMessage);
+
+            // Execute the workflow, emit events and print the output
             await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
-            await WorkflowHelper.PrintWorkflowExecutionEventsAsync(run);
+            await WorkflowHelper.PrintWorkflowExecutionEventsAsync(run, userMessage, "WORKFLOW WITH AGENTS");
+
+            return Ok();
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
+
+
+    [HttpPost("/extract/workflow/as-agents")]
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> RunExtractionWorkflowWithWorkflowsAsAgentsAsync([FromForm] ExtractionRequest request)
+    {
+        try
+        {
+            // Prepare input message with text and image
+            var input = request.InputText ?? System.IO.File.ReadAllText(Path.Combine("Data", "Input", "input.txt"));
+            var query = $"""
+                ## CONTEXT
+                Input:
+                ```
+                {input}
+                ```
+                """;
+
+            byte[] imageBytes;
+            string contentType;
+            if (request.InputImage != null && request.InputImage.Length > 0)
+            {
+                using var memoryStream = new MemoryStream();
+                await request.InputImage.CopyToAsync(memoryStream);
+                imageBytes = memoryStream.ToArray();
+                contentType = request.InputImage.ContentType;
+            }
+            else
+            {
+                imageBytes = System.IO.File.ReadAllBytes(Path.Combine("Data", "Input", "input.png"));
+                contentType = "image/png";
+            }
+
+            ChatMessage userMessage = new(ChatRole.User,
+            [
+                new TextContent(query),
+                new DataContent(imageBytes, contentType)
+            ]);
+
+            // Build the main workflow with subworkflows
+            Workflow mainWorkflow = extractorWorkflowBuilder.BuildMainWorkflowWithWorkflowsAsAgents();
+            await using StreamingRun run = await InProcessExecution.StreamAsync(mainWorkflow, userMessage);
+
+            // Execute the workflow, emit events and print the output
+            await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
+            await WorkflowHelper.PrintWorkflowExecutionEventsAsync(run, userMessage, "WORKFLOW WITH SUBWORKFLOWS");
+
+            return Ok();
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
+
+    [HttpPost("/extract/workflow/sub-workflows")]
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> RunExtractionWorkflowWithSubWorkflowsAsync([FromForm] ExtractionRequest request)
+    {
+        try
+        {
+            // Prepare input message with text and image
+            var input = request.InputText ?? System.IO.File.ReadAllText(Path.Combine("Data", "Input", "input.txt"));
+            var query = $"""
+                ## CONTEXT
+                Input:
+                ```
+                {input}
+                ```
+                """;
+
+            byte[] imageBytes;
+            string contentType;
+            if (request.InputImage != null && request.InputImage.Length > 0)
+            {
+                using var memoryStream = new MemoryStream();
+                await request.InputImage.CopyToAsync(memoryStream);
+                imageBytes = memoryStream.ToArray();
+                contentType = request.InputImage.ContentType;
+            }
+            else
+            {
+                imageBytes = System.IO.File.ReadAllBytes(Path.Combine("Data", "Input", "input.png"));
+                contentType = "image/png";
+            }
+
+            ChatMessage userMessage = new(ChatRole.User,
+            [
+                new TextContent(query),
+                new DataContent(imageBytes, contentType)
+            ]);
+
+            // Build the main workflow with subworkflows
+            Workflow mainWorkflow = extractorWorkflowBuilder.BuildMainWorkflowWithSubWorkflows();
+            await using StreamingRun run = await InProcessExecution.StreamAsync(mainWorkflow, userMessage);
+
+            // Execute the workflow, emit events and print the output
+            await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
+            await WorkflowHelper.PrintWorkflowExecutionEventsAsync(run, userMessage, "WORKFLOW WITH SUBWORKFLOWS");
 
             return Ok();
         }

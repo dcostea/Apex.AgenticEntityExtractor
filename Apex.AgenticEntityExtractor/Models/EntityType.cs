@@ -9,4 +9,7 @@ public class EntityType
 
     [JsonPropertyName("description")]
     public required string Description { get; init; }
+
+    [JsonPropertyName("examples")]
+    public required string[] Examples { get; init; }
 }

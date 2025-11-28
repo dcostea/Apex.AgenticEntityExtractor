@@ -1,47 +1,35 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
 	<PropertyGroup>
-		<TargetFramework>net9.0</TargetFramework>
+		<TargetFramework>net10.0</TargetFramework>
 		<ImplicitUsings>enable</ImplicitUsings>
 		<Nullable>enable</Nullable>
 		<UserSecretsId>03178d60-8dbc-4f22-89c5-60d2cd1718b8</UserSecretsId>
-
 	</PropertyGroup>
 
 	<ItemGroup>
-		<!--<PackageReference Include="Microsoft.Agents.AI.Workflows" Version="1.0.0-preview.251110.2" />
-		<PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="9.0.10" />
-		
-		<PackageReference Include="Azure.AI.OpenAI" Version="2.5.0-beta.1" />
-		<PackageReference Include="Microsoft.Agents.AI" Version="1.0.0-preview.251110.2" />-->
-
-		<!--<PackageReference Include="Microsoft.Agents.AI.AzureAI" Version="1.0.0-preview.251104.1" />-->
-		<PackageReference Include="Microsoft.Agents.AI.OpenAI" Version="1.0.0-preview.251110.2" />
-		<PackageReference Include="Microsoft.Agents.AI.DevUI" Version="1.0.0-preview.251110.2" />
-
-		<PackageReference Include="Swashbuckle.AspNetCore" Version="9.0.6" />
-
-		<PackageReference Include="OllamaSharp" Version="5.4.9" />
-
+		<PackageReference Include="Microsoft.Agents.AI.OpenAI" Version="1.0.0-preview.251125.1" />
+		<PackageReference Include="Microsoft.Extensions.AI.AzureAIInference" Version="10.0.0-preview.1.25559.3" />
+		<PackageReference Include="Azure.AI.OpenAI" Version="2.7.0-beta.1" />
+		<PackageReference Include="Microsoft.Agents.AI.DevUI" Version="1.0.0-preview.251125.1" />
+		<PackageReference Include="OllamaSharp" Version="5.4.11" />
+		<PackageReference Include="Swashbuckle.AspNetCore" Version="10.0.1" />
 	</ItemGroup>
 
 	<ItemGroup>
-	  <None Update="Data\Input\AMS Tech Conf.png">
+	  <None Update="Data\Input\input.png">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
 		<None Update="Data\Input\input.txt">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
-		<None Update="Data\Input\mermaid-sample.md">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-	  </None>
+		<None Update="Data\Instructions\ExtractorAgent.md">
+		  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
 	  <None Update="Data\Instructions\EntitiesAgent.md">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
-	  <None Update="Data\Instructions\ValidationAgent.md">
-	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-	  </None>
-	  <None Update="Data\Instructions\MermaidAgent.md">
+	  <None Update="Data\Instructions\MermaidMermaidReviewerAgent.md">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
 	  <None Update="Data\Instructions\RelationshipsAgent.md">
@@ -53,5 +41,9 @@
 	  <None Update="Data\Ontology\relationships-ontology.json">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Folder Include="Data\Output\" />
 	</ItemGroup>
 </Project>

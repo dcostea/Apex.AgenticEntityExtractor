@@ -1,8 +1,8 @@
-Extract the entities from attached image.
-Extract the entities from the next input.
+Extract the entities from **ATTACHED IMAGE**.
+Extract the entities from the **INPUT TEXT**.
 
-Input:
-+++++++++++++++++++++++
+**INPUT TEXT**
+
 Subject: Follow-up on Amsterdam Tech Conference 2025
 
 Body:

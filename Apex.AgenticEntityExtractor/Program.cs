@@ -1,8 +1,9 @@
-﻿using Apex.AgenticEntityExtractor.Builders;
-using Microsoft.Agents.AI;
+﻿using Apex.AgenticEntityExtractor.Agents;
+using Apex.AgenticEntityExtractor.Clients;
+using Apex.AgenticEntityExtractor.Middleware;
+using Apex.AgenticEntityExtractor.Workflows;
 using Microsoft.Agents.AI.DevUI;
 using Microsoft.Agents.AI.Hosting;
-using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 using System.Text.Json.Serialization;
 
@@ -13,44 +14,59 @@ builder.Services.AddSingleton<IExtractorChatClientBuilder, ExtractorChatClientBu
 builder.Services.AddChatClient(sp =>
 {
     var extractorChatClientBuilder = sp.GetRequiredService<IExtractorChatClientBuilder>();
-    if (builder.Configuration.GetValue<bool>("UseSelfHostedOllama")) 
+    return builder.Configuration["Provider"] switch
     {
-        return extractorChatClientBuilder.BuildOllamaChatClient();
-    }
-    else 
-    {
-        return extractorChatClientBuilder.BuildOpenAIChatClient();   
-    }
+        "Ollama" => extractorChatClientBuilder.BuildOllamaChatClient(),
+        "OpenAI" => extractorChatClientBuilder.BuildOpenAIChatClient(),
+        "AzureOpenAI" => extractorChatClientBuilder.BuildAzureOpenAIChatClient(),
+        _ => throw new NotSupportedException($"Chat provider '{builder.Configuration["Provider"]}' is not supported.")
+    };
 });
 
+// CONFIGURE MIDDLEWARE
+builder.Services.AddDistributedMemoryCache();
+builder.Services.AddSingleton<IToolResponseMiddleware, ToolResponseMiddleware>();
+
 // CONFIGURE AGENTS AND WORKFLOWS
-builder.Services.AddSingleton<IExtractorAgentBuilder, ExtractorAgentBuilder>();
-builder.AddAIAgent("EntitiesAgent", (sp, _) => 
+builder.Services.AddSingleton<IExtractorAgentsBuilder, ExtractorAgentsBuilder>();
+builder.Services.AddSingleton<IExtractorWorkflowBuilder, ExtractorWorkflowBuilder>();
+
+// DEVUI AGENTS AND WORKFLOWS REGISTRATION
+builder.AddAIAgent("ExtractorAgent", (sp, _) =>
 {
-    //_logger.LogInformation("Using Single Entities Agent");
-    var extractorAgentBuilder = sp.GetRequiredService<IExtractorAgentBuilder>();
-    return extractorAgentBuilder.BuildEntitiesAgent();
+    var extractorAgentsBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
+    return extractorAgentsBuilder.BuildExtractorAgent();
+});
+builder.AddAIAgent("EntitiesAgent", (sp, _) =>
+{
+    var extractorAgentsBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
+    return extractorAgentsBuilder.BuildEntitiesAgent();
 });
 builder.AddAIAgent("RelationshipsAgent", (sp, _) =>
 {
-    //_logger.LogInformation("Using Single Relationships Agent");
-    var extractorAgentBuilder = sp.GetRequiredService<IExtractorAgentBuilder>();
-    return extractorAgentBuilder.BuildRelationshipsAgent();
+    var extractorAgentsBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
+    return extractorAgentsBuilder.BuildRelationshipsAgent();
 });
-builder.AddAIAgent("MermaidAgent", (sp, _) =>
+builder.AddAIAgent("MermaidDiagramAgent", (sp, _) =>
 {
-    //_logger.LogInformation("Using Single Mermaid Agent");
-    var extractorAgentBuilder = sp.GetRequiredService<IExtractorAgentBuilder>();
-    return extractorAgentBuilder.BuildMermaidAgent();
+    var extractorAgentsBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
+    return extractorAgentsBuilder.BuildMermaidDiagramAgent();
 });
-builder.AddWorkflow("ExtractionWorkflow", (sp, name) =>
+builder.AddAIAgent("MermaidReviewerAgent", (sp, _) =>
 {
-    List<AIAgent> agents = [
-        sp.GetRequiredKeyedService<AIAgent>("EntitiesAgent"),
-        sp.GetRequiredKeyedService<AIAgent>("RelationshipsAgent"),
-        sp.GetRequiredKeyedService<AIAgent>("MermaidAgent")
-    ];
-    return AgentWorkflowBuilder.BuildSequential(name, agents);
+    var extractorAgentsBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
+    return extractorAgentsBuilder.BuildMermaidReviewerAgent();
+});
+builder.AddWorkflow("MainWorkflow", (sp, name) =>
+{
+    var extractorWorkflowBuilder = sp.GetRequiredService<IExtractorWorkflowBuilder>();
+    return extractorWorkflowBuilder.BuildMainWorkflow();
+})
+.AddAsAIAgent();
+builder.AddWorkflow("MainWorkflowWithSubWorkflows", (sp, name) =>
+{
+    var extractorWorkflowBuilder = sp.GetRequiredService<IExtractorWorkflowBuilder>();
+    return extractorWorkflowBuilder.BuildMainWorkflowWithSubWorkflows();
 })
 .AddAsAIAgent();
 
