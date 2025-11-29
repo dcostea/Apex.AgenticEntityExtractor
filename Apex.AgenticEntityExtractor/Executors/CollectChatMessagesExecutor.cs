@@ -13,5 +13,5 @@ internal sealed class CollectChatMessagesExecutor(string id) : ChatProtocolExecu
     protected override ValueTask TakeTurnAsync(List<ChatMessage> messages, IWorkflowContext context, bool? emitEvents, CancellationToken cancellationToken = default)
         => context.SendMessageAsync(messages, cancellationToken: cancellationToken);
 
-    ValueTask IResettableExecutor.ResetAsync() => this.ResetAsync();
+    ValueTask IResettableExecutor.ResetAsync() => ResetAsync();
 }
