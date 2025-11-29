@@ -9,9 +9,9 @@ namespace Apex.AgenticEntityExtractor.Helpers;
 
 public static class WorkflowHelper
 {
-    public static async Task PrintAgentResponseStreamAsync(AIAgent agent, ChatMessage message)
+    public static async Task PrintAgentResponseStreamAsync(AIAgent agent, ChatMessage message, string header)
     {
-        PrintExecutionHeader("AGENT RESPONSE STREAM");
+        PrintExecutionHeader(header);
 
         ConsoleHelper.PrintColoredLine($"""
             QUERY:
@@ -260,8 +260,8 @@ public static class WorkflowHelper
         }
 
         // Use AuthorName if available (for group chat agents), otherwise use ExecutorId
-        string agentIdentifier = !string.IsNullOrEmpty(e.Update.AuthorName) 
-            ? e.Update.AuthorName 
+        string agentIdentifier = !string.IsNullOrEmpty(e.Update.AuthorName)
+            ? e.Update.AuthorName
             : e.ExecutorId.Split('_')[0];
 
         if (agentIdentifier != lastExecutorId)
@@ -301,7 +301,7 @@ public static class WorkflowHelper
     {
         ConsoleHelper.PrintColoredLine("***** Execution Summary *************************************************************************************************", ConsoleColor.Yellow);
         Console.WriteLine();
-        
+
         if (executorDurations.Count != 0)
         {
             ConsoleHelper.PrintColoredLine("Executor/Agent Execution Times:", ConsoleColor.Yellow);

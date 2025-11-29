@@ -6,6 +6,6 @@ public class ExtractionRequest
 {
     [DefaultValue("")]
     public string? InputText { get; set; }
-    
+
     public IFormFile? InputImage { get; set; }
 }

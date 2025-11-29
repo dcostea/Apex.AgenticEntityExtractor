@@ -7,7 +7,7 @@ namespace Apex.AgenticEntityExtractor.GroupChatManagers;
 public class ApprovalRoundRobinGroupChatManager(IReadOnlyList<AIAgent> agents, Func<RoundRobinGroupChatManager, IEnumerable<ChatMessage>, CancellationToken, ValueTask<bool>> terminationFunction)
     : RoundRobinGroupChatManager(agents, shouldTerminateFunc: terminationFunction)
 {
-    // Property that explicitly accesses the base implementation
+    // Property that ignores the base implementation of IterationCount since is internal and cannot be read here.
     public int CurrentIterationCount { get; set; }
 
     public new ValueTask<bool> ShouldTerminateAsync(IReadOnlyList<ChatMessage> messages, CancellationToken cancellationToken)

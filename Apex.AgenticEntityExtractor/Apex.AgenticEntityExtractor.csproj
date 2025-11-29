@@ -23,7 +23,7 @@
 		<None Update="Data\Input\input.txt">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
-		<None Update="Data\Instructions\ExtractorAgent.md">
+		<None Update="Data\Instructions\ExtractorSoloAgent.md">
 		  <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
 	  <None Update="Data\Instructions\EntitiesAgent.md">

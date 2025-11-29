@@ -18,8 +18,8 @@ public class ExtractorAgentsBuilder(IChatClient chatClient, IToolResponseMiddlew
     {
         AIAgent extractorAgent = chatClient.CreateAIAgent(new ChatClientAgentOptions
         {
-            Name = "ExtractorAgent",
-            Instructions = File.ReadAllText(Path.Combine("Data", "Instructions", "ExtractorAgent.md")),
+            Name = "ExtractorSoloAgent",
+            Instructions = File.ReadAllText(Path.Combine("Data", "Instructions", "ExtractorSoloAgent.md")),
             ChatOptions = new ChatOptions
             {
                 MaxOutputTokens = 1000,

@@ -1,11 +1,10 @@
 ﻿using Microsoft.Extensions.AI;
 
-namespace Apex.AgenticEntityExtractor.Clients
+namespace Apex.AgenticEntityExtractor.Clients;
+
+public interface IExtractorChatClientBuilder
 {
-    public interface IExtractorChatClientBuilder
-    {
-        IChatClient BuildOllamaChatClient();
-        IChatClient BuildOpenAIChatClient();
-        IChatClient BuildAzureOpenAIChatClient();
-    }
+    IChatClient BuildOllamaChatClient();
+    IChatClient BuildOpenAIChatClient();
+    IChatClient BuildAzureOpenAIChatClient();
 }

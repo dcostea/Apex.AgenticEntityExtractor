@@ -4,27 +4,27 @@ namespace Apex.AgenticEntityExtractor.Tools;
 
 internal class FilesPlugin
 {
-//    [Description("Save the extracted entities")]
-//    public static void SaveEntities([Description("Entities in JSON format to be saved")] Entities entities)
-//    {
-//        string filePath = Path.Combine("Data", "Output", "nodes.json");
-//        Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
-//        File.WriteAllText(filePath, JsonSerializer.Serialize(entities));
-//        Console.ForegroundColor = ConsoleColor.Blue;
-//        Console.WriteLine($"[FILES PLUGIN: SaveEntities] Entities saved {entities?.Items?.Count} to: {filePath}");
-//        Console.ResetColor();
-//    }
+    //    [Description("Save the extracted entities")]
+    //    public static void SaveEntities([Description("Entities in JSON format to be saved")] Entities entities)
+    //    {
+    //        string filePath = Path.Combine("Data", "Output", "nodes.json");
+    //        Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
+    //        File.WriteAllText(filePath, JsonSerializer.Serialize(entities));
+    //        Console.ForegroundColor = ConsoleColor.Blue;
+    //        Console.WriteLine($"[FILES PLUGIN: SaveEntities] Entities saved {entities?.Items?.Count} to: {filePath}");
+    //        Console.ResetColor();
+    //    }
 
-//    [Description("Save the extracted relationships")]
-//    public static void SaveRelationships([Description("Relationships in JSON format to be saved")] Relationships relationships)
-//    {
-//        string filePath = Path.Combine("Data", "Output", "edges.json");
-//        Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
-//        File.WriteAllText(filePath, JsonSerializer.Serialize(relationships));
-//        Console.ForegroundColor = ConsoleColor.Blue;
-//        Console.WriteLine($"[FILES PLUGIN: SaveRelationships] Relationships saved {relationships?.Items?.Count} to: {filePath}");
-//        Console.ResetColor();
-//    }
+    //    [Description("Save the extracted relationships")]
+    //    public static void SaveRelationships([Description("Relationships in JSON format to be saved")] Relationships relationships)
+    //    {
+    //        string filePath = Path.Combine("Data", "Output", "edges.json");
+    //        Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
+    //        File.WriteAllText(filePath, JsonSerializer.Serialize(relationships));
+    //        Console.ForegroundColor = ConsoleColor.Blue;
+    //        Console.WriteLine($"[FILES PLUGIN: SaveRelationships] Relationships saved {relationships?.Items?.Count} to: {filePath}");
+    //        Console.ResetColor();
+    //    }
 
     [Description("Save the Mermaid graph")]
     public static async Task SaveMermaidDiagramAsync([Description("Mermaid graph to be saved")] string mermaid)

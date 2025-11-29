@@ -12,17 +12,17 @@ public class Terminators
         {
             var lastText = messages.LastOrDefault()?.Text ?? "";
             bool isApproved = lastText.Contains("APPROVED", StringComparison.OrdinalIgnoreCase) &&
-                !lastText.Contains("ERRORS FOUND", StringComparison.OrdinalIgnoreCase);
+                !lastText.Contains("ERRORS", StringComparison.OrdinalIgnoreCase);
 
             // Access properties based on the actual type
-            int currentIteration = chatManager is ApprovalRoundRobinGroupChatManager approvalManager 
-                ? approvalManager.CurrentIterationCount 
+            int currentIteration = chatManager is ApprovalRoundRobinGroupChatManager approvalManager
+                ? approvalManager.CurrentIterationCount
                 : chatManager.IterationCount;
             int maxIteration = chatManager.MaximumIterationCount;
 
             if (isApproved)
             {
-                ConsoleHelper.PrintColoredLine($"\n[✓] Diagram APPROVED - Exiting review loop (iteration {currentIteration}/{maxIteration})\n", ConsoleColor.Green);
+                ConsoleHelper.PrintColoredLine($"\n[✓] Diagram APPROVED - Exiting review loop (iteration {currentIteration}/{maxIteration})\n", ConsoleColor.Yellow);
             }
             else if (currentIteration >= maxIteration)
             {
@@ -31,7 +31,7 @@ public class Terminators
             }
             else
             {
-                ConsoleHelper.PrintColoredLine($"\n[✗] Errors found - Retrying (iteration {currentIteration}/{maxIteration})\n", ConsoleColor.Red);
+                ConsoleHelper.PrintColoredLine($"\n[✗] Errors found - Retrying (iteration {currentIteration}/{maxIteration})\n", ConsoleColor.Yellow);
             }
 
             return ValueTask.FromResult(isApproved);

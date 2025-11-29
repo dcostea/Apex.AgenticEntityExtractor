@@ -33,7 +33,7 @@ public class ToolResponseMiddleware(IDistributedCache cache, IConfiguration conf
             var resultBytes = JsonSerializer.SerializeToUtf8Bytes(result);
             var options = new DistributedCacheEntryOptions
             {
-                AbsoluteExpirationRelativeToNow = configuration.GetValue<TimeSpan?>("CacheTTL")
+                AbsoluteExpirationRelativeToNow = configuration.GetValue<TimeSpan?>("ToolResponseCacheTTL")
             };
             await cache.SetAsync(cacheKey, resultBytes, options, cancellationToken);
             ConsoleHelper.PrintColoredLine($"[{agent.Name}] Function: {context.Function.Name} - Cached result", ConsoleColor.DarkCyan);

@@ -31,44 +31,49 @@ builder.Services.AddSingleton<IToolResponseMiddleware, ToolResponseMiddleware>()
 builder.Services.AddSingleton<IExtractorAgentsBuilder, ExtractorAgentsBuilder>();
 builder.Services.AddSingleton<IExtractorWorkflowBuilder, ExtractorWorkflowBuilder>();
 
-// DEVUI AGENTS AND WORKFLOWS REGISTRATION
-builder.AddAIAgent("ExtractorAgent", (sp, _) =>
+// DEVUI AGENTS REGISTRATION
+builder.AddAIAgent("ExtractorSoloAgent", (sp, _) =>
 {
-    var extractorAgentsBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
-    return extractorAgentsBuilder.BuildExtractorAgent();
+    var agentBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
+    return agentBuilder.BuildExtractorAgent();
 });
 builder.AddAIAgent("EntitiesAgent", (sp, _) =>
 {
-    var extractorAgentsBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
-    return extractorAgentsBuilder.BuildEntitiesAgent();
+    var agentBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
+    return agentBuilder.BuildEntitiesAgent();
 });
 builder.AddAIAgent("RelationshipsAgent", (sp, _) =>
 {
-    var extractorAgentsBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
-    return extractorAgentsBuilder.BuildRelationshipsAgent();
+    var agentBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
+    return agentBuilder.BuildRelationshipsAgent();
 });
 builder.AddAIAgent("MermaidDiagramAgent", (sp, _) =>
 {
-    var extractorAgentsBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
-    return extractorAgentsBuilder.BuildMermaidDiagramAgent();
+    var agentBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
+    return agentBuilder.BuildMermaidDiagramAgent();
 });
 builder.AddAIAgent("MermaidReviewerAgent", (sp, _) =>
 {
-    var extractorAgentsBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
-    return extractorAgentsBuilder.BuildMermaidReviewerAgent();
+    var agentBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
+    return agentBuilder.BuildMermaidReviewerAgent();
 });
-builder.AddWorkflow("MainWorkflow", (sp, name) =>
+
+// DEVUI WORKFLOWS REGISTRATION
+builder.AddWorkflow("WorkflowFromSequentialWorkflow", (sp, name) =>
 {
-    var extractorWorkflowBuilder = sp.GetRequiredService<IExtractorWorkflowBuilder>();
-    return extractorWorkflowBuilder.BuildMainWorkflow();
-})
-.AddAsAIAgent();
-builder.AddWorkflow("MainWorkflowWithSubWorkflows", (sp, name) =>
+    var workflowBuilder = sp.GetRequiredService<IExtractorWorkflowBuilder>();
+    return workflowBuilder.BuildWorkflowFromSequentialWorkflow("WorkflowFromSequentialWorkflow");
+}).AddAsAIAgent();
+builder.AddWorkflow("WorkflowFromWorkflowsAsAgents", (sp, name) =>
 {
-    var extractorWorkflowBuilder = sp.GetRequiredService<IExtractorWorkflowBuilder>();
-    return extractorWorkflowBuilder.BuildMainWorkflowWithSubWorkflows();
-})
-.AddAsAIAgent();
+    var workflowBuilder = sp.GetRequiredService<IExtractorWorkflowBuilder>();
+    return workflowBuilder.BuildWorkflowFromWorkflowsAsAgents("WorkflowFromWorkflowsAsAgents");
+}).AddAsAIAgent();
+builder.AddWorkflow("WorkflowFromSubWorkflows", (sp, name) =>
+{
+    var workflowBuilder = sp.GetRequiredService<IExtractorWorkflowBuilder>();
+    return workflowBuilder.BuildWorkflowFromSubWorkflows("WorkflowFromSubWorkflows");
+}).AddAsAIAgent();
 
 // CONFIGURE CONTROLLERS, SWAGGER, AND DEVUI
 builder.Services.AddControllers().AddJsonOptions(options =>
