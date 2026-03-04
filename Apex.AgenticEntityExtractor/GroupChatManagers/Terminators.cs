@@ -1,42 +1,70 @@
-﻿using Apex.AgenticEntityExtractor.Helpers;
+﻿using Apex.AgenticEntityExtractor.Executors;
+using Apex.AgenticEntityExtractor.Helpers;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 
 namespace Apex.AgenticEntityExtractor.GroupChatManagers;
 
+/// <summary>
+/// Provides termination functions for group chat orchestrations.
+///
+/// A termination function is called by the <see cref="RoundRobinGroupChatManager"/> (or its
+/// <see cref="ApprovalManager"/> subclass) after each agent turn to decide
+/// whether the conversation should stop. It receives the manager instance and the current
+/// conversation history.
+/// </summary>
 public class Terminators
 {
-    public static Func<RoundRobinGroupChatManager, IEnumerable<ChatMessage>, CancellationToken, ValueTask<bool>> TerminationFunction()
+  /// <summary>
+  /// Creates a termination function that ends the group chat when:
+  /// <list type="bullet">
+  ///   <item>The last message contains <c>"APPROVED"</c> (without <c>"ERRORS"</c>) — the reviewer
+  ///         accepted the diagram.</item>
+  ///   <item>The iteration count reaches the maximum — forces termination as a safety net.</item>
+  /// </list>
+  ///
+  /// This function works with both orchestration paths:
+  /// <list type="bullet">
+  ///   <item><b>Custom orchestration:</b> reads <see cref="ApprovalManager.CurrentIterationCount"/>
+  ///         (incremented by our <see cref="RefinementExecutor"/>).</item>
+  ///   <item><b>High-level workflow:</b> reads the base <c>IterationCount</c> property
+  ///         (incremented by the framework's internal host).</item>
+  /// </list>
+  /// Status messages are recorded via <see cref="WorkflowHelper.RecordReviewStatusEvent(string)"/>
+  /// so they appear in the dashboard review-status panel.
+  /// </summary>
+  public static Func<RoundRobinGroupChatManager, IEnumerable<ChatMessage>, CancellationToken, ValueTask<bool>> TerminationFunction()
+  {
+    return (RoundRobinGroupChatManager chatManager, IEnumerable<ChatMessage> messages, CancellationToken _) =>
     {
-        var terminationFunction = (RoundRobinGroupChatManager chatManager, IEnumerable<ChatMessage> messages, CancellationToken ct) =>
-        {
-            var lastText = messages.LastOrDefault()?.Text ?? "";
-            bool isApproved = lastText.Contains("APPROVED", StringComparison.OrdinalIgnoreCase) &&
-                !lastText.Contains("ERRORS", StringComparison.OrdinalIgnoreCase);
+      var lastText = messages.LastOrDefault()?.Text ?? "";
 
-            // Access properties based on the actual type
-            int currentIteration = chatManager is ApprovalRoundRobinGroupChatManager approvalManager
-                ? approvalManager.CurrentIterationCount
-                : chatManager.IterationCount;
-            int maxIteration = chatManager.MaximumIterationCount;
+      int currentIteration = chatManager is ApprovalManager approvalManager
+        ? approvalManager.CurrentIterationCount
+        : chatManager.IterationCount;
+      int maxIteration = chatManager.MaximumIterationCount;
 
-            if (isApproved)
-            {
-                ConsoleHelper.PrintColoredLine($"\n[✓] Diagram APPROVED - Exiting review loop (iteration {currentIteration}/{maxIteration})\n", ConsoleColor.Yellow);
-            }
-            else if (currentIteration >= maxIteration)
-            {
-                ConsoleHelper.PrintColoredLine($"\n[!] Max iterations reached - Forcing approval\n", ConsoleColor.Yellow);
-                return ValueTask.FromResult(true);
-            }
-            else
-            {
-                ConsoleHelper.PrintColoredLine($"\n[✗] Errors found - Retrying (iteration {currentIteration}/{maxIteration})\n", ConsoleColor.Yellow);
-            }
+      if (currentIteration >= maxIteration)
+      {
+        WorkflowHelper.RecordReviewStatusEvent($"⚠ Max round-robin turns reached - Stopping review loop without approval (turn {currentIteration}/{maxIteration})");
+        return ValueTask.FromResult(true);
+      }
 
-            return ValueTask.FromResult(isApproved);
-        };
+      bool isApproved = lastText.Contains("APPROVED", StringComparison.OrdinalIgnoreCase) &&
+        !lastText.Contains("ERRORS", StringComparison.OrdinalIgnoreCase);
 
-        return terminationFunction;
-    }
+      if (isApproved)
+      {
+        WorkflowHelper.RecordReviewStatusEvent($"✅ Diagram APPROVED - Exiting review loop (turn {currentIteration}/{maxIteration})");
+        return ValueTask.FromResult(true);
+      }
+
+      if (lastText.Contains("ERRORS FOUND", StringComparison.OrdinalIgnoreCase))
+      {
+        WorkflowHelper.RecordReviewStatusEvent($"✓ Reviewer requested changes - Retrying (turn {currentIteration}/{maxIteration})");
+      }
+
+      return ValueTask.FromResult(false);
+    };
+  }
 }

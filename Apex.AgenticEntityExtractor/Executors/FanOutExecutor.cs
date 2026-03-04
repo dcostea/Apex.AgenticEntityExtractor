@@ -1,0 +1,76 @@
+﻿using Microsoft.Agents.AI.Workflows;
+using Microsoft.Extensions.AI;
+
+namespace Apex.AgenticEntityExtractor.Executors;
+
+/// <summary>
+/// <b>Fan-Out Entry Point</b> — the first executor in a concurrent orchestration stage.
+/// Buffers incoming messages and, on receiving a <see cref="TurnToken"/>, broadcasts them
+/// to all connected downstream agents.
+///
+/// <b>Role in the graph:</b>
+/// <code>
+///   ──→ [FanOutExecutor] ──fan-out──→ [Agent 1], [Agent 2], [Agent 3]
+/// </code>
+///
+/// <b>Two-phase message handling:</b>
+/// <list type="number">
+///   <item><see cref="HandleMessage"/> / <see cref="HandleMessages"/> — buffer incoming
+///         messages. Two overloads are provided so the executor can accept either a single
+///         <see cref="ChatMessage"/> (e.g. from an upstream agent sending one message) or a
+///         full <c>List&lt;ChatMessage&gt;</c> (e.g. from an <see cref="AggregatorExecutor"/>
+///         forwarding a merged batch). Both overloads <b>replace</b> the buffer rather than
+///         appending, since only the latest input is relevant.</item>
+///   <item><see cref="HandleTurnAsync"/> — triggered by a <see cref="TurnToken"/>; sends the
+///         buffered messages followed by a new <see cref="TurnToken"/> to all connected agents.
+///         If no messages were buffered (spurious token), returns silently.</item>
+/// </list>
+///
+/// <b>Cross-run state:</b> Declared as <c>declareCrossRunShareable: true</c> and implements
+/// <see cref="IResettableExecutor"/> so the message buffer is cleared between runs.
+/// </summary>
+[SendsMessage(typeof(List<ChatMessage>))]
+[SendsMessage(typeof(TurnToken))]
+public partial class FanOutExecutor(string executorId)
+  : Executor(executorId, declareCrossRunShareable: true), IResettableExecutor
+{
+  private List<ChatMessage> _messages = [];
+
+  /// <summary>Accepts a single <see cref="ChatMessage"/> and replaces the buffer.</summary>
+  [MessageHandler]
+  private void HandleMessage(ChatMessage message, IWorkflowContext context)
+  {
+    _messages = [message];
+  }
+
+  /// <summary>Accepts a full message list and replaces the buffer.</summary>
+  [MessageHandler]
+  private void HandleMessages(List<ChatMessage> messages, IWorkflowContext context)
+  {
+    _messages = messages;
+  }
+
+  /// <summary>Broadcasts the buffered messages and a <see cref="TurnToken"/> to all downstream agents.</summary>
+  [MessageHandler]
+  private async ValueTask HandleTurnAsync(TurnToken token, IWorkflowContext context, CancellationToken cancellationToken)
+  {
+    // No messages buffered — spurious TurnToken, nothing to broadcast
+    if (_messages.Count == 0)
+      return;
+
+    // Swap-and-clear to avoid rebroadcasting on subsequent TurnTokens
+    List<ChatMessage> messages = _messages;
+    _messages = [];
+
+    // Both sends go to ALL connected edges (fan-out topology)
+    await context.SendMessageAsync(messages, cancellationToken: cancellationToken);
+    await context.SendMessageAsync(new TurnToken(emitEvents: token.EmitEvents is true), cancellationToken: cancellationToken);
+  }
+
+  /// <summary>Asynchronously clears all messages from the collection, resetting it to an empty state.</summary>
+  public ValueTask ResetAsync()
+  {
+    _messages = [];
+    return default;
+  }
+}

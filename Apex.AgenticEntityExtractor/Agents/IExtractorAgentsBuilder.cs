@@ -1,13 +1,33 @@
-﻿using Microsoft.Agents.AI;
+﻿using Apex.AgenticEntityExtractor.Enums;
+using Microsoft.Agents.AI;
 
 namespace Apex.AgenticEntityExtractor.Agents
 {
-    public interface IExtractorAgentsBuilder
-    {
-        AIAgent BuildExtractorAgent();
-        AIAgent BuildEntitiesAgent(string suffix = "");
-        AIAgent BuildRelationshipsAgent(string suffix = "");
-        AIAgent BuildMermaidDiagramAgent();
-        AIAgent BuildMermaidReviewerAgent();
-    }
+  public interface IExtractorAgentsBuilder
+  {
+    /// <summary>
+    /// Builds the single-pass extractor agent.
+    /// </summary>
+    AIAgent BuildExtractorAgent(ChatProvider? provider = null);
+
+    /// <summary>
+    /// Builds an entities extraction agent, optionally suffixing the agent name.
+    /// </summary>
+    AIAgent BuildEntitiesAgent(string suffix = "", ChatProvider? provider = null);
+
+    /// <summary>
+    /// Builds a relationships extraction agent, optionally suffixing the agent name.
+    /// </summary>
+    AIAgent BuildRelationshipsAgent(string suffix = "", ChatProvider? provider = null);
+
+    /// <summary>
+    /// Builds the mermaid diagram generation agent.
+    /// </summary>
+    AIAgent BuildMermaidDiagramAgent(ChatProvider? provider = null);
+
+    /// <summary>
+    /// Builds the mermaid review/approval agent.
+    /// </summary>
+    AIAgent BuildMermaidReviewerAgent(ChatProvider? provider = null);
+  }
 }

@@ -1,320 +1,616 @@
 ﻿using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
+using Spectre.Console;
+using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Reflection;
+using System.Text;
 using System.Text.Json;
 
 namespace Apex.AgenticEntityExtractor.Helpers;
 
 public static class WorkflowHelper
 {
-    public static async Task PrintAgentResponseStreamAsync(AIAgent agent, ChatMessage message, string header)
+  private static readonly System.Buffers.SearchValues<char> s_guidChars = System.Buffers.SearchValues.Create(GuidChars);
+  private const string GuidChars = "0123456789abcdefABCDEF";
+  private static readonly ConcurrentQueue<string> ExternalToolEvents = new();
+  private static readonly ConcurrentQueue<string> ReviewStatusEvents = new();
+
+  private static readonly string[] AgentColorPalette =
+    ["cyan1", "green", "yellow", "magenta1", "dodgerblue1", "orange1", "mediumpurple1", "turquoise2", "salmon1", "chartreuse1"];
+
+  internal static string GetOrAssignAgentColor(string agentKey, Dictionary<string, string> agentColors)
+  {
+    if (!agentColors.TryGetValue(agentKey, out var color))
     {
-        PrintExecutionHeader(header);
+      color = AgentColorPalette[agentColors.Count % AgentColorPalette.Length];
+      agentColors[agentKey] = color;
+    }
+    return color;
+  }
 
-        ConsoleHelper.PrintColoredLine($"""
-            QUERY:
+  // ════════════════════════════════════════════════════════════════════════
+  //  PUBLIC API
+  // ════════════════════════════════════════════════════════════════════════
 
-            {message.Text}
-            """, ConsoleColor.Green);
+  /// <summary>
+  /// Streams a single agent's response to the console with author tracking.
+  /// </summary>
+  public static async Task RenderAgentResponseStreamAsync(AIAgent agent, ChatMessage message, string header)
+  {
+    WorkflowConsoleRenderer.PrintBanner(header);
+    WorkflowConsoleRenderer.PrintQuery(message);
+    WorkflowConsoleRenderer.PrintInputImage(message);
 
-        string? lastAuthor = null;
-        await foreach (var update in agent.RunStreamingAsync(message))
-        {
-            // when new author, print author header
-            if (lastAuthor != update.AuthorName)
-            {
-                lastAuthor = update.AuthorName;
-                ConsoleHelper.PrintColoredLine($"** {update.AuthorName} **", ConsoleColor.Yellow);
-            }
+    string? lastAuthor = null;
+    await foreach (var update in agent.RunStreamingAsync(message))
+    {
+      if (lastAuthor != update.AuthorName)
+      {
+        lastAuthor = update.AuthorName;
+        AnsiConsole.WriteLine();
+        AnsiConsole.MarkupLine($"  [cyan]🤖 [{Markup.Escape(update.AuthorName ?? "")}][/]");
+      }
 
-            ConsoleHelper.PrintColored(update.Text, ConsoleColor.Yellow);
-        }
+      AnsiConsole.Markup($"[white]{Markup.Escape(update.Text ?? "")}[/]");
+    }
+    AnsiConsole.WriteLine();
+  }
+
+  /// <summary>
+  /// Watches the full workflow event stream and prints a rich, structured execution log
+  /// showing every superstep, executor invocation, agent response, and timing summary.
+  /// </summary>
+  public static async Task<string?> RenderWorkflowExecutionEventsAsync(StreamingRun run, string header)
+  {
+    var started = Stopwatch.StartNew();
+    var executorTimings = new Dictionary<string, Stopwatch>();
+    var executorDurations = new Dictionary<string, TimeSpan>();
+
+    var eventLines = new List<string>();
+    var fullEventLog = new List<string>();
+    var coloredOutput = new StringBuilder();
+    var toolLines = new List<string>();
+    var toolDedup = new HashSet<string>();
+
+    int tokenCount = 0;
+    int superStep = 0;
+    string? activeAgent = null;
+    string? lastOutputAgent = null;
+    int lastConsoleWidth = Console.WindowWidth;
+    int lastConsoleHeight = Console.WindowHeight;
+
+    var agentTokenCounts = new Dictionary<string, int>();
+    var agentColorMap = new Dictionary<string, string>();
+    var perAgentOutput = new Dictionary<string, StringBuilder>();
+    var perAgentResponseCounts = new Dictionary<string, int>();
+    var pendingNextResponseHeader = new HashSet<string>();
+    var executorInvocationCounts = new Dictionary<string, int>();
+    var superStepTimings = new Dictionary<int, Stopwatch>();
+    var superStepDurations = new Dictionary<int, TimeSpan>();
+    var uniqueAgents = new HashSet<string>();
+    var pendingTurnTokenCounts = new Dictionary<string, int>();
+
+    // Throttle: only refresh the live dashboard at most every 150 ms to avoid
+    // extreme GC pressure from hundreds of per-token refreshes per second.
+    var refreshThrottle = Stopwatch.StartNew();
+    const int RefreshIntervalMs = 150;
+    bool dashboardDirty = false;
+    string cachedColoredText = string.Empty;
+
+    string? yieldedOutputText = null;
+
+    var reviewLines = new List<string>();
+
+    void LogEvent(string text)
+    {
+      eventLines.Add(text);
+      fullEventLog.Add(text);
     }
 
-    public static async Task PrintWorkflowExecutionEventsAsync(StreamingRun run, ChatMessage message, string header)
-    {
-        string? lastExecutorId = null;
-        var workflowStopwatch = Stopwatch.StartNew();
-        var executorTimings = new Dictionary<string, Stopwatch>();
-        var executorDurations = new Dictionary<string, TimeSpan>();
+    var root = new Layout("Root")
+      .SplitRows(
+        new Layout("Top").Size(3),
+        new Layout("Main")
+          .SplitColumns(
+            new Layout("LeftColumn").Ratio(1)
+              .SplitRows(
+                new Layout("Left").Ratio(3),
+                new Layout("ReviewStatus").Ratio(1)),
+            new Layout("Middle").Ratio(1),
+            new Layout("Right").Ratio(1)
+              .SplitRows(
+                new Layout("Tools").Ratio(1),
+                new Layout("Metrics").Ratio(2))));
 
-        PrintExecutionHeader(header);
+    root["Top"].Update(new Panel($"[yellow bold]{Markup.Escape(header)}[/]")
+      .Border(BoxBorder.Double)
+      .BorderColor(Color.Yellow)
+      .Expand());
 
-        ConsoleHelper.PrintColoredLine($"""
-            QUERY:
+    root["Left"].Update(WorkflowConsoleRenderer.BuildDashboardPanel("🤖 Latest Output", "Waiting for model output...", Color.Cyan1));
+    root["ReviewStatus"].Update(WorkflowConsoleRenderer.BuildDashboardPanel("🔄 Terminator Status", "Waiting for terminator review status...", Color.Yellow));
+    root["Middle"].Update(WorkflowConsoleRenderer.BuildDashboardPanel("📋 Events", "Waiting for events...", Color.Grey));
+    root["Tools"].Update(WorkflowConsoleRenderer.BuildDashboardPanel("🔧 Tools", "Waiting for tool calls/responses...", Color.Blue));
+    root["Metrics"].Update(WorkflowConsoleRenderer.BuildDashboardPanel("📊 Metrics", "Elapsed: 0.0s", Color.Gold1));
 
-            {message.Text}
-            """, ConsoleColor.Green);
-
-        await foreach (WorkflowEvent evt in run.WatchStreamAsync())
+    await AnsiConsole.Live(root)
+      .AutoClear(false)
+      .Overflow(VerticalOverflow.Ellipsis)
+      .Cropping(VerticalOverflowCropping.Bottom)
+      .StartAsync(async ctx =>
+      {
+        void FinalizeWorkflow(string eventText, string status)
         {
-            switch (evt)
-            {
-                case SuperStepStartedEvent stepStarted:
-                    PrintStepHeader(stepStarted.StepNumber);
-                    PrintEventWithData(evt);
-                    if (stepStarted.Data is SuperStepStartInfo startInfo)
-                    {
-                        ConsoleHelper.PrintColoredLine($"Sending Executors: {string.Join(", ", startInfo.SendingExecutors.Select(s => s.Split('_')[0]))}", ConsoleColor.Yellow);
-                    }
-                    break;
-
-                case SuperStepCompletedEvent stepCompleted:
-                    PrintEventWithData(evt);
-                    if (stepCompleted.Data is SuperStepCompletionInfo completionInfo)
-                    {
-                        ConsoleHelper.PrintColoredLine($"Activated Executors: {string.Join(", ", completionInfo.ActivatedExecutors.Select(s => s.Split('_')[0]))}", ConsoleColor.Yellow);
-                    }
-                    Console.WriteLine();
-                    break;
-
-                case ExecutorInvokedEvent invoked:
-                    PrintEventWithExecutor(evt, invoked.ExecutorId);
-                    // Start timing for this executor
-                    if (!executorTimings.TryGetValue(invoked.ExecutorId, out Stopwatch? invokedStopwatch))
-                    {
-                        executorTimings[invoked.ExecutorId] = Stopwatch.StartNew();
-                    }
-                    else
-                    {
-                        invokedStopwatch.Restart();
-                    }
-                    break;
-
-                case ExecutorCompletedEvent completed:
-                    PrintEventWithExecutor(evt, completed.ExecutorId);
-                    // Stop timing for this executor
-                    if (executorTimings.TryGetValue(completed.ExecutorId, out var completedStopwatch))
-                    {
-                        completedStopwatch.Stop();
-                        if (!executorDurations.ContainsKey(completed.ExecutorId))
-                        {
-                            executorDurations[completed.ExecutorId] = completedStopwatch.Elapsed;
-                        }
-                        else
-                        {
-                            executorDurations[completed.ExecutorId] += completedStopwatch.Elapsed;
-                        }
-                    }
-                    break;
-
-                case ExecutorFailedEvent failed:
-                    PrintEventWithExecutor(evt, failed.ExecutorId);
-                    Console.WriteLine(failed.Data?.Message);
-                    // Stop timing for failed executor
-                    if (executorTimings.TryGetValue(failed.ExecutorId, out var failedStopwatch))
-                    {
-                        failedStopwatch.Stop();
-                        if (!executorDurations.ContainsKey(failed.ExecutorId))
-                        {
-                            executorDurations[failed.ExecutorId] = failedStopwatch.Elapsed;
-                        }
-                        else
-                        {
-                            executorDurations[failed.ExecutorId] += failedStopwatch.Elapsed;
-                        }
-                    }
-                    break;
-
-                case WorkflowStartedEvent or WorkflowWarningEvent or RequestInfoEvent:
-                    PrintEventWithSerializedData(evt);
-                    break;
-
-                case AgentRunUpdateEvent update:
-                    if (!PrintRunUpdateEvent(update, ref lastExecutorId)) continue;
-                    break;
-
-                case AgentRunResponseEvent:
-                    PrintEventWithSerializedData(evt);
-                    break;
-
-                case WorkflowOutputEvent output:
-                    workflowStopwatch.Stop();
-                    PrintWorkflowOutput(output);
-                    PrintExecutionSummary(executorDurations, workflowStopwatch.Elapsed);
-                    return;
-
-                case WorkflowErrorEvent error:
-                    ConsoleHelper.PrintColoredLine($"[{evt.GetType().Name}]", ConsoleColor.Red);
-                    Console.WriteLine((error.Data as TargetInvocationException)?.Message);
-                    workflowStopwatch.Stop();
-                    PrintExecutionSummary(executorDurations, workflowStopwatch.Elapsed);
-                    break;
-
-                default:
-                    ConsoleHelper.PrintColoredLine($"[{evt.GetType().Name}]", ConsoleColor.Red);
-                    Console.WriteLine(JsonSerializer.Serialize(evt));
-                    break;
-            }
+          started.Stop();
+          FlushInProgressTimings(executorTimings, executorDurations);
+          FlushInProgressSuperStepTimings(superStepTimings, superStepDurations);
+          FlushPendingTurnTokenCounts(pendingTurnTokenCounts, fullEventLog);
+          DrainExternalToolEvents(toolLines, toolDedup);
+          LogEvent(eventText);
+          cachedColoredText = coloredOutput.ToString();
+          WorkflowConsoleRenderer.UpdateDashboardPanels(root, eventLines, cachedColoredText, toolLines, reviewLines, executorDurations, started.Elapsed, tokenCount, superStep, null, status, agentTokenCounts, executorInvocationCounts, superStepDurations, uniqueAgents);
+          ctx.Refresh();
         }
-
-        workflowStopwatch.Stop();
-        PrintExecutionSummary(executorDurations, workflowStopwatch.Elapsed);
-    }
-
-    public static async Task PrintWorkflowFinalMessageAsync(StreamingRun run, ChatMessage message, string header)
-    {
-        PrintExecutionHeader(header);
-
-        ConsoleHelper.PrintColoredLine($"""
-            QUERY:
-
-            {message.Text}
-            """, ConsoleColor.Green);
 
         await foreach (var evt in run.WatchStreamAsync())
         {
-            if (evt is WorkflowOutputEvent outputEvent)
-            {
-                ConsoleHelper.PrintColoredLine($"{outputEvent.SourceId}: {outputEvent.As<List<ChatMessage>>()?.LastOrDefault()?.Text}", ConsoleColor.Yellow);
-            }
-        }
-    }
+          DrainExternalToolEvents(toolLines, toolDedup);
+          DrainReviewStatusEvents(reviewLines);
 
+          switch (evt)
+          {
+            case SuperStepStartedEvent stepStarted:
+              superStep = stepStarted.StepNumber;
+              FlushPendingTurnTokenCounts(pendingTurnTokenCounts, fullEventLog);
+              var stepStartText = $"⏳ Step #{stepStarted.StepNumber}";
+              if (stepStarted.Data is SuperStepStartInfo startInfo && startInfo.SendingExecutors.Count != 0)
+              {
+                stepStartText += $" ← Senders: {string.Join(", ", startInfo.SendingExecutors.Select(GetShortExecutorId))}";
+              }
+              LogEvent(stepStartText);
+              superStepTimings[stepStarted.StepNumber] = Stopwatch.StartNew();
+              break;
 
-    public static void PrintTools(List<ChatMessage> messages)
-    {
-        foreach (var message in messages)
-        {
-            if (message.Role == ChatRole.Assistant)
-            {
-                foreach (var content in message.Contents)
+            case SuperStepCompletedEvent stepCompleted:
+              FlushPendingTurnTokenCounts(pendingTurnTokenCounts, fullEventLog);
+              if (superStepTimings.TryGetValue(stepCompleted.StepNumber, out var ssSw))
+              {
+                ssSw.Stop();
+                superStepDurations[stepCompleted.StepNumber] = ssSw.Elapsed;
+              }
+              var stepCompletedText = $"✅ Step #{stepCompleted.StepNumber}";
+              if (stepCompleted.Data is SuperStepCompletionInfo completionInfo)
+              {
+                if (completionInfo.ActivatedExecutors.Count != 0)
                 {
-                    if (content is FunctionCallContent toolCall)
-                    {
-                        var arguments = toolCall.Arguments is null ? "" : JsonSerializer.Serialize(toolCall.Arguments);
-                        ConsoleHelper.PrintColoredLine($"TOOL CALL [{toolCall.CallId}] {toolCall.Name} {arguments}", ConsoleColor.Blue);
-                    }
+                  stepCompletedText += $" → Activated: {string.Join(", ", completionInfo.ActivatedExecutors.Select(GetShortExecutorId))}";
                 }
-            }
-            if (message.Role == ChatRole.Tool)
-            {
-                foreach (var content in message.Contents)
+                if (completionInfo.InstantiatedExecutors.Count != 0)
                 {
-                    if (content is FunctionResultContent toolResult)
-                    {
-                        var annotations = toolResult.Annotations is null ? "" : JsonSerializer.Serialize(toolResult.Annotations);
-                        ConsoleHelper.PrintColoredLine($"TOOL RESP [{toolResult.CallId}] {toolResult.Result} {annotations}", ConsoleColor.Blue);
-                    }
+                  LogEvent(stepCompletedText);
+                  LogEvent($"  🆕 Instantiated: {string.Join(", ", completionInfo.InstantiatedExecutors.Select(GetShortExecutorId))}");
+                  break;
                 }
-            }
-        }
-        Console.ResetColor();
-    }
+              }
+              LogEvent(stepCompletedText);
+              break;
 
-    public static async Task PrintToMarkdownAsync(Workflow workflow)
-    {
-        var mermaid = workflow.ToMermaidString();
-        var markdown = $"# Workflow Diagram\n\n```mermaid\n{mermaid}\n```\n";
-        var projectDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", ".."));
-        var filePath = Path.Combine(projectDir, "workflow.md");
-        await File.WriteAllTextAsync(filePath, markdown);
-    }
+            case ExecutorInvokedEvent invoked:
+              if (invoked.Data is TurnToken)
+              {
+                var shortId = GetShortExecutorId(invoked.ExecutorId);
+                pendingTurnTokenCounts[shortId] = pendingTurnTokenCounts.TryGetValue(shortId, out var ttc) ? ttc + 1 : 1;
+              }
+              else
+              {
+                FlushPendingTurnTokenCounts(pendingTurnTokenCounts, fullEventLog);
+                var shortId = GetShortExecutorId(invoked.ExecutorId);
+                var preview = GetDataPreview(invoked.Data);
+                fullEventLog.Add(string.IsNullOrEmpty(preview)
+                  ? $"⏳ {shortId}"
+                  : $"⏳ {shortId}: {preview}");
+              }
+              executorInvocationCounts[invoked.ExecutorId] = executorInvocationCounts.TryGetValue(invoked.ExecutorId, out var cnt) ? cnt + 1 : 1;
+              StartTiming(invoked.ExecutorId, executorTimings);
+              break;
 
+            case ExecutorCompletedEvent completed:
+              if (completed.Data is not TurnToken)
+              {
+                var completedPreview = GetDataPreview(completed.Data);
+                fullEventLog.Add(string.IsNullOrEmpty(completedPreview)
+                  ? $"✅ {GetShortExecutorId(completed.ExecutorId)}"
+                  : $"✅ {GetShortExecutorId(completed.ExecutorId)}: {completedPreview}");
+              }
+              TryExtractToolsFromObject(completed.Data, toolLines, toolDedup);
+              StopTiming(completed.ExecutorId, executorTimings, executorDurations);
+              break;
 
-    // Private helper methods
+            case ExecutorFailedEvent failed:
+              var failLine = $"❌ {GetShortExecutorId(failed.ExecutorId)} FAILED: {FirstLine(failed.Data?.Message)}";
+              LogEvent(failLine);
+              StopTiming(failed.ExecutorId, executorTimings, executorDurations);
+              break;
 
-    private static void PrintExecutionHeader(string header)
-    {
-        Console.WriteLine();
-        ConsoleHelper.PrintColoredLine($"***** {header} ************************************************************************************", ConsoleColor.Yellow);
-        Console.WriteLine();
-    }
+            case AgentResponseUpdateEvent update:
+              if (!string.IsNullOrEmpty(update.Update.Text))
+              {
+                var agentKey = GetShortExecutorId(update.ExecutorId);
+                var color = GetOrAssignAgentColor(agentKey, agentColorMap);
 
-    // Private helper methods
-    private static void PrintStepHeader(int stepNumber)
-    {
-        ConsoleHelper.PrintColoredLine($"***** STEP: {stepNumber} *************************************************************************************************", ConsoleColor.Yellow);
-    }
+                if (agentKey != lastOutputAgent)
+                {
+                  lastOutputAgent = agentKey;
+                  coloredOutput.AppendLine();
+                  coloredOutput.AppendLine($"[{color} bold]🤖 {Markup.Escape(agentKey)}:[/]");
+                }
 
-    private static void PrintEventWithData(WorkflowEvent evt)
-    {
-        ConsoleHelper.PrintColored($"[{evt.GetType().Name}] ", ConsoleColor.DarkGray);
-    }
+                var escaped = Markup.Escape(update.Update.Text);
+                coloredOutput.Append($"[{color}]{escaped.Replace("\n", $"[/]\n[{color}]")}[/]");
 
-    private static void PrintEventWithExecutor(WorkflowEvent evt, string executorId)
-    {
-        ConsoleHelper.PrintColoredLine($"\n[{evt.GetType().Name}] {executorId.Split('_')[0]}", ConsoleColor.DarkGray);
-    }
+                if (!perAgentOutput.TryGetValue(agentKey, out var agentBuffer))
+                {
+                  agentBuffer = new StringBuilder();
+                  perAgentOutput[agentKey] = agentBuffer;
+                }
 
-    private static void PrintEventWithSerializedData(WorkflowEvent evt)
-    {
-        object? data = evt switch
-        {
-            WorkflowStartedEvent wse => wse.Data,
-            WorkflowWarningEvent wwe => wwe.Data,
-            RequestInfoEvent rie => rie.Data,
-            _ => null
-        };
-        ConsoleHelper.PrintColoredLine($"[{evt.GetType().Name}] {JsonSerializer.Serialize(data)}", ConsoleColor.DarkGray);
-    }
+                // When a new response starts for the same agent, add a separator so code
+                // fences from multiple invocations don't get concatenated.
+                if (!perAgentResponseCounts.TryAdd(agentKey, 1) && pendingNextResponseHeader.Remove(agentKey))
+                {
+                  int responseNumber = ++perAgentResponseCounts[agentKey];
+                  agentBuffer.AppendLine();
+                  agentBuffer.AppendLine();
+                  agentBuffer.AppendLine($"--- Response #{responseNumber} ---");
+                  agentBuffer.AppendLine();
+                }
 
-    private static bool PrintRunUpdateEvent(AgentRunUpdateEvent e, ref string? lastExecutorId)
-    {
-        if (string.IsNullOrEmpty(e.Update.Text))
-        {
-            // Tool calls are logged by the FunctionCallMiddleware with cache status
-            return false;
-        }
+                agentBuffer.Append(update.Update.Text);
 
-        // Use AuthorName if available (for group chat agents), otherwise use ExecutorId
-        string agentIdentifier = !string.IsNullOrEmpty(e.Update.AuthorName)
-            ? e.Update.AuthorName
-            : e.ExecutorId.Split('_')[0];
+                activeAgent = agentKey;
+                uniqueAgents.Add(agentKey);
+                agentTokenCounts[agentKey] = agentTokenCounts.TryGetValue(agentKey, out var atc) ? atc + 1 : 1;
+                dashboardDirty = true;
+                tokenCount++;
+              }
+              break;
 
-        if (agentIdentifier != lastExecutorId)
-        {
-            lastExecutorId = agentIdentifier;
-            Console.WriteLine();
-            ConsoleHelper.PrintColoredLine($"[{agentIdentifier}]:", ConsoleColor.Yellow);
-            Console.WriteLine();
-        }
+            case WorkflowStartedEvent:
+              LogEvent("▶ Workflow started");
+              break;
 
-        ConsoleHelper.PrintColored(e.Update.Text, ConsoleColor.Green);
+            // Subclass events must precede parent class events to avoid unreachable code
+            case SubworkflowErrorEvent subError:
+              var subErrText = $"❌ Subworkflow error: {FirstLine(subError.Data)}";
+              LogEvent(subErrText);
+              break;
 
-        return true;
-    }
+            case SubworkflowWarningEvent subWarning:
+              var subWarnText = $"⚠ Subworkflow warning: {subWarning.Data}";
+              LogEvent(subWarnText);
+              break;
 
-    private static void PrintWorkflowOutput(WorkflowOutputEvent output)
-    {
-        ConsoleHelper.PrintColoredLine($"[{output.GetType().Name}] {output.SourceId}", ConsoleColor.DarkGray);
-        ConsoleHelper.PrintColoredLine("\nRESPONSE:\n", ConsoleColor.Yellow);
+            case WorkflowWarningEvent warning:
+              var warnText = $"⚠ Warning: {warning.Data}";
+              LogEvent(warnText);
+              break;
 
-        var messages = output.As<List<ChatMessage>>();
-        var final = messages?.LastOrDefault()?.Text;
-        if (!string.IsNullOrWhiteSpace(final))
-        {
-            ConsoleHelper.PrintColoredLine(final, ConsoleColor.Yellow);
-        }
-        else
-        {
-            ConsoleHelper.PrintColoredLine("WARNING: No final message text found!", ConsoleColor.Red);
-        }
+            case RequestInfoEvent requestInfo:
+              var reqText = $"📨 External request: {requestInfo.Data}";
+              LogEvent(reqText);
+              break;
 
-        ConsoleHelper.PrintColoredLine("***** Run Complete *************************************************************************************************", ConsoleColor.Yellow);
-        Console.WriteLine();
-    }
+            // AgentResponseEvent extends WorkflowOutputEvent — must be matched first to avoid premature exit
+            case AgentResponseEvent agentResponse:
+              TryExtractToolsFromObject(agentResponse.Data, toolLines, toolDedup);
+              pendingNextResponseHeader.Add(GetShortExecutorId(agentResponse.ExecutorId));
+              break;
 
-    private static void PrintExecutionSummary(Dictionary<string, TimeSpan> executorDurations, TimeSpan totalTime)
-    {
-        ConsoleHelper.PrintColoredLine("***** Execution Summary *************************************************************************************************", ConsoleColor.Yellow);
-        Console.WriteLine();
+            case WorkflowOutputEvent output:
+              TryExtractToolsFromObject(output.As<List<ChatMessage>>(), toolLines, toolDedup);
+              yieldedOutputText = output.As<List<ChatMessage>>()?.LastOrDefault()?.Text;
+              FinalizeWorkflow("🏁 Workflow completed", "Completed");
+              return;
 
-        if (executorDurations.Count != 0)
-        {
-            ConsoleHelper.PrintColoredLine("Executor/Agent Execution Times:", ConsoleColor.Yellow);
-            foreach (var kvp in executorDurations)
+            case WorkflowErrorEvent error:
+              FinalizeWorkflow($"❌ Workflow error: {FirstLine(error.Data)}", "Error");
+              return;
+          }
+
+          // Throttle refresh: only update dashboard at most every 150 ms
+          if (refreshThrottle.ElapsedMilliseconds >= RefreshIntervalMs)
+          {
+            if (dashboardDirty)
             {
-                var executorName = kvp.Key.Split('_')[0];
-                ConsoleHelper.PrintColoredLine($"  {executorName}: {kvp.Value.TotalSeconds:F2}s", ConsoleColor.Yellow);
+              cachedColoredText = coloredOutput.ToString();
+              dashboardDirty = false;
             }
-            Console.WriteLine();
-        }
 
-        ConsoleHelper.PrintColoredLine($"TOTAL Workflow Execution Time: {totalTime.TotalSeconds:F2}s", ConsoleColor.Yellow);
-        ConsoleHelper.PrintColoredLine("***** End Summary *************************************************************************************************", ConsoleColor.Yellow);
-        Console.WriteLine();
+            WorkflowConsoleRenderer.UpdateDashboardPanels(root, eventLines, cachedColoredText, toolLines, reviewLines, executorDurations, started.Elapsed, tokenCount, superStep, activeAgent, "Running", agentTokenCounts, executorInvocationCounts, superStepDurations, uniqueAgents);
+
+            int currentWidth = Console.WindowWidth;
+            int currentHeight = Console.WindowHeight;
+            if (currentWidth != lastConsoleWidth || currentHeight != lastConsoleHeight)
+            {
+              lastConsoleWidth = currentWidth;
+              lastConsoleHeight = currentHeight;
+              AnsiConsole.Clear();
+            }
+
+            ctx.Refresh();
+            refreshThrottle.Restart();
+          }
+        }
+      });
+
+    started.Stop();
+    FlushInProgressTimings(executorTimings, executorDurations);
+    FlushInProgressSuperStepTimings(superStepTimings, superStepDurations);
+    AnsiConsole.WriteLine();
+    WorkflowConsoleRenderer.PrintPostDashboardLog(fullEventLog, coloredOutput.ToString(), yieldedOutputText, executorDurations, started.Elapsed, tokenCount, perAgentOutput, agentColorMap);
+    return yieldedOutputText;
+  }
+
+  /// <summary>
+  /// Watches the workflow stream but only prints the final output message (quiet mode).
+  /// </summary>
+  public static async Task RenderWorkflowFinalMessageAsync(StreamingRun run, string header)
+  {
+    WorkflowConsoleRenderer.PrintBanner(header);
+
+    await foreach (var evt in run.WatchStreamAsync())
+    {
+      if (evt is WorkflowOutputEvent outputEvent)
+      {
+        var text = outputEvent.As<List<ChatMessage>>()?.LastOrDefault()?.Text;
+        if (!string.IsNullOrWhiteSpace(text))
+        {
+          WorkflowConsoleRenderer.PrintFinalResponsePanel(text);
+        }
+      }
     }
+  }
+
+  // Presentation methods are handled by WorkflowConsoleRenderer.
+
+  /// <summary>
+  /// Emits a single collapsed summary line per executor for accumulated TurnToken events,
+  /// then clears the pending counts.
+  /// </summary>
+  private static void FlushPendingTurnTokenCounts(Dictionary<string, int> pendingCounts, List<string> fullEventLog)
+  {
+    if (pendingCounts.Count == 0)
+      return;
+
+    foreach (var (executorId, count) in pendingCounts)
+    {
+      fullEventLog.Add($"🔄 {executorId}: {count}× TurnToken");
+    }
+
+    pendingCounts.Clear();
+  }
+
+  private static void TryExtractToolsFromMessages(IEnumerable<ChatMessage>? messages, List<string> toolLines, HashSet<string> dedup)
+  {
+    if (messages is null)
+      return;
+
+    foreach (var message in messages)
+    {
+      foreach (var content in message.Contents)
+      {
+        if (content is FunctionCallContent call)
+        {
+          var args = call.Arguments is null ? string.Empty : JsonSerializer.Serialize(call.Arguments);
+          var line = $"CALL [{call.CallId}] {call.Name}({args})";
+          if (dedup.Add(line))
+          {
+            toolLines.Add(line);
+          }
+        }
+        else if (content is FunctionResultContent result)
+        {
+          var line = $"RESP [{result.CallId}] {result.Result}";
+          if (dedup.Add(line))
+          {
+            toolLines.Add(line);
+          }
+        }
+      }
+    }
+  }
+
+  private static void TryExtractToolsFromObject(object? data, List<string> toolLines, HashSet<string> dedup)
+  {
+    if (data is null)
+      return;
+
+    if (data is IEnumerable<ChatMessage> messages)
+    {
+      TryExtractToolsFromMessages(messages, toolLines, dedup);
+      return;
+    }
+
+    if (data is AgentResponse agentResponse)
+    {
+      TryExtractToolsFromMessages(agentResponse.Messages, toolLines, dedup);
+      return;
+    }
+
+    var messagesProperty = data.GetType().GetProperty("Messages");
+    if (messagesProperty?.GetValue(data) is IEnumerable<ChatMessage> propertyMessages)
+    {
+      TryExtractToolsFromMessages(propertyMessages, toolLines, dedup);
+    }
+  }
+
+  public static void RecordExternalToolEvent(string line)
+  {
+    if (!string.IsNullOrWhiteSpace(line))
+      ExternalToolEvents.Enqueue(line);
+  }
+
+  public static void RecordReviewStatusEvent(string line)
+  {
+    if (!string.IsNullOrWhiteSpace(line))
+      ReviewStatusEvents.Enqueue(line);
+  }
+
+  private static void DrainReviewStatusEvents(List<string> reviewLines)
+  {
+    while (ReviewStatusEvents.TryDequeue(out var line))
+    {
+      reviewLines.Add(line);
+    }
+  }
+
+  private static void DrainExternalToolEvents(List<string> toolLines, HashSet<string> dedup)
+  {
+    while (ExternalToolEvents.TryDequeue(out var line))
+    {
+      if (dedup.Add(line))
+      {
+        toolLines.Add(line);
+      }
+    }
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  //  TIMING HELPERS
+  // ════════════════════════════════════════════════════════════════════════
+
+  private static void StartTiming(string executorId, Dictionary<string, Stopwatch> timings)
+  {
+    timings[executorId] = Stopwatch.StartNew();
+  }
+
+  private static void StopTiming(string executorId, Dictionary<string, Stopwatch> timings, Dictionary<string, TimeSpan> durations)
+  {
+    if (!timings.Remove(executorId, out var sw))
+      return;
+
+    sw.Stop();
+    durations[executorId] = durations.TryGetValue(executorId, out var existing)
+      ? existing + sw.Elapsed
+      : sw.Elapsed;
+  }
+
+  private static void FlushInProgressTimings(Dictionary<string, Stopwatch> timings, Dictionary<string, TimeSpan> durations)
+  {
+    foreach (var (id, sw) in timings)
+    {
+      if (!sw.IsRunning) continue;
+      sw.Stop();
+      durations[id] = durations.TryGetValue(id, out var existing)
+        ? existing + sw.Elapsed
+        : sw.Elapsed;
+    }
+    timings.Clear();
+  }
+
+  private static void FlushInProgressSuperStepTimings(Dictionary<int, Stopwatch> timings, Dictionary<int, TimeSpan> durations)
+  {
+    foreach (var (step, sw) in timings)
+    {
+      if (!sw.IsRunning) continue;
+      sw.Stop();
+      durations[step] = sw.Elapsed;
+    }
+    timings.Clear();
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  //  UTILITIES
+  // ════════════════════════════════════════════════════════════════════════
+
+  internal static string FirstLine(object? data)
+  {
+    var text = data is Exception ex ? ex.Message : data?.ToString();
+    return text?.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "";
+  }
+
+  /// <summary>
+  /// Produces a human-readable short form of an executor ID by stripping
+  /// framework-appended GUID suffixes while preserving meaningful name parts.
+  /// <list type="bullet">
+  ///   <item><c>EntitiesAgent_1_abc123…789abc</c> → <c>EntitiesAgent_1</c> (GUID stripped, name suffix preserved)</item>
+  ///   <item><c>Batch/EntitiesAgent_1</c> → kept as-is (no GUID)</item>
+  ///   <item><c>MermaidDiagramAgent</c> → kept as-is (no GUID)</item>
+  ///   <item><c>ede7d7f050d54183bd34169b3e26e265</c> → <c>26e265</c> (pure GUID fallback)</item>
+  ///   <item><c>RelationshipAggregator</c> → kept as-is</item>
+  /// </list>
+  /// </summary>
+  internal static string GetShortExecutorId(string executorId)
+  {
+    // Find the last underscore — framework IDs follow the pattern <AgentName>_<GUID>
+    int lastUnderscoreIdx = executorId.LastIndexOf('_');
+    if (lastUnderscoreIdx > 0)
+    {
+      var suffix = executorId[(lastUnderscoreIdx + 1)..];
+
+      // Only strip if the trailing segment looks like a GUID (long hex string)
+      if (suffix.Length > 6 && suffix.AsSpan().IndexOfAnyExcept(s_guidChars) < 0)
+        return executorId[..lastUnderscoreIdx];
+
+      return executorId;
+    }
+
+    // Pure GUID fallback (no underscore, all hex, 32+ chars)
+    if (executorId.Length >= 32 && executorId.AsSpan().IndexOfAnyExcept(s_guidChars) < 0)
+      return executorId[^6..];
+
+    return executorId;
+  }
+
+  /// <summary>
+  /// Extracts a short, single-line text preview from executor event data
+  /// (the input message for <see cref="ExecutorInvokedEvent"/> or the result
+  /// for <see cref="ExecutorCompletedEvent"/>). Returns empty string for null data.
+  /// </summary>
+  internal static string GetDataPreview(object? data, int maxLen = 160)
+  {
+    if (data is null)
+      return "";
+
+    if (data is TurnToken)
+      return "TurnToken";
+
+    string? preview = null;
+
+    if (data is ChatMessage message)
+    {
+      var text = message.Text;
+      preview = string.IsNullOrWhiteSpace(text)
+        ? $"ChatMessage(role={message.Role})"
+        : $"ChatMessage(role={message.Role}) {text}";
+    }
+    else if (data is IEnumerable<ChatMessage> messages)
+    {
+      var list = messages as IList<ChatMessage> ?? messages.ToList();
+      if (list.Count == 0)
+        return "empty";
+
+      var lastText = list[^1].Text;
+      preview = lastText is not null
+        ? $"({list.Count} msg) {lastText}"
+        : $"({list.Count} msg)";
+    }
+    else if (data is AgentResponse response)
+    {
+      var lastText = response.Messages?.LastOrDefault()?.Text;
+      if (lastText is not null)
+        preview = lastText;
+    }
+
+    preview ??= data.GetType().Name;
+
+    // Collapse to a single line
+    preview = preview.ReplaceLineEndings(" ");
+
+    if (preview.Length > maxLen)
+      preview = string.Concat(preview.AsSpan(0, maxLen - 1), "…");
+
+    return preview;
+  }
 }

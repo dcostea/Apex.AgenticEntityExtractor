@@ -1,121 +1,168 @@
-﻿using Apex.AgenticEntityExtractor.Middleware;
+﻿using System.Collections.Concurrent;
+using Apex.AgenticEntityExtractor.Clients;
+using Apex.AgenticEntityExtractor.Enums;
+using Apex.AgenticEntityExtractor.Middleware;
 using Apex.AgenticEntityExtractor.Tools;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
-using OpenAI;
 
 namespace Apex.AgenticEntityExtractor.Agents;
 
 /// <summary>
 /// Builder for creating AI agents used in entity extraction workflows.
+/// Each build method accepts an optional <see cref="ChatProvider"/> to override
+/// the default provider read from configuration (<c>appsettings.json → Provider</c>).
+/// Chat clients are lazily created and cached inside <see cref="IExtractorChatClientBuilder"/>.
 /// </summary>
-public class ExtractorAgentsBuilder(IChatClient chatClient, IToolResponseMiddleware toolResponseMiddleware) : IExtractorAgentsBuilder
+public class ExtractorAgentsBuilder(
+  IExtractorChatClientBuilder chatClientBuilder,
+  IConfiguration configuration,
+  IToolResponseMiddleware toolResponseMiddleware) : IExtractorAgentsBuilder
 {
-    /// <summary>
-    /// Builds extractor agent.
-    /// </summary>
-    public AIAgent BuildExtractorAgent()
+  private readonly ChatProvider _defaultProvider =
+    Enum.Parse<ChatProvider>(configuration["Provider"] ?? "AzureOpenAI");
+
+  private static readonly ConcurrentDictionary<string, string> _instructionsCache = new();
+
+  private IChatClient GetChatClient(ChatProvider? provider) =>
+    chatClientBuilder.GetChatClient(provider ?? _defaultProvider);
+
+  private static string LoadInstructions(string fileName) =>
+    _instructionsCache.GetOrAdd(fileName, f => File.ReadAllText(Path.Combine("Data", "Instructions", f)));
+
+  /// <summary>
+  /// Builds the single-pass extractor agent that runs the full extraction prompt in one call.
+  /// </summary>
+  public AIAgent BuildExtractorAgent(ChatProvider? provider = null)
+  {
+    AIAgent extractorAgent = GetChatClient(provider).AsAIAgent(new ChatClientAgentOptions
     {
-        AIAgent extractorAgent = chatClient.CreateAIAgent(new ChatClientAgentOptions
-        {
-            Name = "ExtractorSoloAgent",
-            Instructions = File.ReadAllText(Path.Combine("Data", "Instructions", "ExtractorSoloAgent.md")),
-            ChatOptions = new ChatOptions
-            {
-                MaxOutputTokens = 1000,
-                //Temperature = 0.1F,
-            }
-        })
-            .AsBuilder()
-            .Use(toolResponseMiddleware.CacheMiddleware)
-            .Build();
+      Name = "ExtractorSoloAgent",
+      ChatOptions = new ChatOptions
+      {
+        Instructions = LoadInstructions("ExtractorSoloAgent.md"),
 
-        return extractorAgent;
-    }
+        MaxOutputTokens = 1000,
+        //Temperature = 0.1F,
+      }
+    });
 
-    /// <summary>
-    /// Builds extraction entities agent.
-    /// </summary>
-    public AIAgent BuildEntitiesAgent(string suffix = "")
+    return extractorAgent;
+  }
+
+  /// <summary>
+  /// Builds an entities extraction agent configured to require ontology tool usage.
+  /// </summary>
+  public AIAgent BuildEntitiesAgent(string suffix = "", ChatProvider? provider = null)
+  {
+    AIAgent entitiesAgent = GetChatClient(provider).AsAIAgent(new ChatClientAgentOptions
     {
-        AIAgent entitiesAgent = chatClient.CreateAIAgent(new ChatClientAgentOptions
+      Name = string.IsNullOrEmpty(suffix) ? "EntAgent" : $"EntAgent_{suffix}",
+      ChatOptions = new ChatOptions
+      {
+        Instructions = LoadInstructions("EntitiesAgent.md"),
+
+        MaxOutputTokens = 3000,
+        //Temperature = 0.1F,
+        Tools = [AIFunctionFactory.Create(OntologyTools.LoadEntitiesOntologyAsync, "load_entities_ontology")],
+        ToolMode = ChatToolMode.Auto,
+        Reasoning = new ReasoningOptions
         {
-            Name = $"EntitiesAgent{suffix}",
-            Instructions = File.ReadAllText(Path.Combine("Data", "Instructions", "EntitiesAgent.md")),
-            ChatOptions = new ChatOptions
-            {
-                MaxOutputTokens = 1000,
-                //Temperature = 0.1F,
-                Tools = [AIFunctionFactory.Create(OntologyPlugin.LoadEntitiesOntologyAsync, "load_entities_ontology")],
-                ToolMode = ChatToolMode.RequireAny,
-            }
-        })
-            .AsBuilder()
-            .Use(toolResponseMiddleware.CacheMiddleware)
-            .Build();
+          Effort = ReasoningEffort.None
+        },
+      }
+    })
+      .AsBuilder()
+      .Use(toolResponseMiddleware.CacheToolResponseAsync)
+      .Build();
 
-        return entitiesAgent;
-    }
+    return entitiesAgent;
+  }
 
-    /// <summary>
-    /// Builds a single relationship extraction agent. 
-    /// </summary>
-    public AIAgent BuildRelationshipsAgent(string suffix = "")
+  /// <summary>
+  /// Builds a relationships extraction agent configured to require ontology tool usage.
+  /// </summary>
+  public AIAgent BuildRelationshipsAgent(string suffix = "", ChatProvider? provider = null)
+  {
+    AIAgent relationshipsAgent = GetChatClient(provider).AsAIAgent(new ChatClientAgentOptions
     {
-        AIAgent relationshipsAgent = chatClient.CreateAIAgent(new ChatClientAgentOptions
+      Name = string.IsNullOrEmpty(suffix) ? "RelAgent" : $"RelAgent_{suffix}",
+      ChatOptions = new ChatOptions
+      {
+        Instructions = LoadInstructions("RelationshipsAgent.md"),
+
+        MaxOutputTokens = 3000,
+        //Temperature = 0.1F,
+        Tools = [AIFunctionFactory.Create(OntologyTools.LoadRelationshipsOntologyAsync, "load_relationships_ontology")],
+        ToolMode = ChatToolMode.Auto,
+        Reasoning = new ReasoningOptions
         {
-            Name = $"RelationshipsAgent{suffix}",
-            Instructions = File.ReadAllText(Path.Combine("Data", "Instructions", "RelationshipsAgent.md")),
-            ChatOptions = new ChatOptions
-            {
-                MaxOutputTokens = 1000,
-                //Temperature = 0.1F,
-                Tools = [AIFunctionFactory.Create(OntologyPlugin.LoadRelationshipsOntologyAsync, "load_relationships_ontology")],
-                ToolMode = ChatToolMode.RequireAny,
-            }
-        })
-            .AsBuilder()
-            .Use(toolResponseMiddleware.CacheMiddleware)
-            .Build();
+          Effort = ReasoningEffort.None
+        },
+      }
+    })
+      .AsBuilder()
+      .Use(toolResponseMiddleware.CacheToolResponseAsync)
+      .Build();
 
-        return relationshipsAgent;
-    }
+    return relationshipsAgent;
+  }
 
-    /// <summary>
-    /// Builds mermaid diagram builder agent.
-    /// </summary>
-    public AIAgent BuildMermaidDiagramAgent()
+  /// <summary>
+  /// Builds the mermaid diagram generation agent.
+  /// </summary>
+  public AIAgent BuildMermaidDiagramAgent(ChatProvider? provider = null)
+  {
+    AIAgent mermaidDiagramAgent = GetChatClient(provider).AsAIAgent(new ChatClientAgentOptions
     {
-        AIAgent mermaidDiagramAgent = chatClient.CreateAIAgent(new ChatClientAgentOptions
+      Name = "MermaidDiagramAgent",
+      ChatOptions = new ChatOptions
+      {
+        Instructions = LoadInstructions("MermaidDiagramAgent.md"),
+
+        MaxOutputTokens = 3000,
+        //Temperature = 0.1F,
+        Reasoning = new ReasoningOptions
         {
-            Name = "MermaidDiagramAgent",
-            Instructions = File.ReadAllText(Path.Combine("Data", "Instructions", "MermaidDiagramAgent.md")),
-            ChatOptions = new ChatOptions
-            {
-                MaxOutputTokens = 1500,
-                //Temperature = 0.1F,
-            }
-        });
+          Effort = ReasoningEffort.None
+        },
+      }
+    });
 
-        return mermaidDiagramAgent;
-    }
+    return mermaidDiagramAgent;
+  }
 
-    /// <summary>
-    /// Builds mermaid reviewer agent.
-    /// </summary>
-    public AIAgent BuildMermaidReviewerAgent()
+  /// <summary>
+  /// Builds the mermaid review/approval agent configured with ontology tools
+  /// so it can validate that entity and relationship types conform to the defined ontologies.
+  /// </summary>
+  public AIAgent BuildMermaidReviewerAgent(ChatProvider? provider = null)
+  {
+    AIAgent mermaidReviewerAgent = GetChatClient(provider).AsAIAgent(new ChatClientAgentOptions
     {
-        AIAgent mermaidReviewerAgent = chatClient.CreateAIAgent(new ChatClientAgentOptions
-        {
-            Name = "MermaidReviewerAgent",
-            Instructions = File.ReadAllText(Path.Combine("Data", "Instructions", "MermaidReviewerAgent.md")),
-            ChatOptions = new ChatOptions
-            {
-                MaxOutputTokens = 1500,
-                //Temperature = 0.1F,
-            }
-        });
+      Name = "MermaidReviewerAgent",
+      ChatOptions = new ChatOptions
+      {
+        Instructions = LoadInstructions("MermaidReviewerAgent.md"),
 
-        return mermaidReviewerAgent;
-    }
+        MaxOutputTokens = 3000,
+        //Temperature = 0.1F,
+        Tools =
+        [
+          AIFunctionFactory.Create(OntologyTools.LoadEntitiesOntologyAsync, "load_entities_ontology"),
+          AIFunctionFactory.Create(OntologyTools.LoadRelationshipsOntologyAsync, "load_relationships_ontology"),
+        ],
+        ToolMode = ChatToolMode.Auto,
+        Reasoning = new ReasoningOptions
+        {
+          Effort = ReasoningEffort.None
+        },
+      }
+    })
+      .AsBuilder()
+      .Use(toolResponseMiddleware.CacheToolResponseAsync)
+      .Build();
+
+    return mermaidReviewerAgent;
+  }
 }

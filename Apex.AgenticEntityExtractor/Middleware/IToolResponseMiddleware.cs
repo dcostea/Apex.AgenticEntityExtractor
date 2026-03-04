@@ -5,5 +5,8 @@ namespace Apex.AgenticEntityExtractor.Middleware;
 
 public interface IToolResponseMiddleware
 {
-    ValueTask<object?> CacheMiddleware(AIAgent agent, FunctionInvocationContext context, Func<FunctionInvocationContext, CancellationToken, ValueTask<object?>> next, CancellationToken cancellationToken);
+  /// <summary>
+  /// Wraps tool invocation with cache lookup/store behavior for tool responses.
+  /// </summary>
+  ValueTask<object?> CacheToolResponseAsync(AIAgent agent, FunctionInvocationContext context, Func<FunctionInvocationContext, CancellationToken, ValueTask<object?>> next, CancellationToken cancellationToken);
 }

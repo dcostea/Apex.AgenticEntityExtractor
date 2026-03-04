@@ -1,78 +1,89 @@
-﻿using Apex.AgenticEntityExtractor.Models;
+﻿using Apex.AgenticEntityExtractor.Helpers;
+using Apex.AgenticEntityExtractor.Models;
 using Microsoft.Extensions.AI;
 using System.Text.Json;
 
 namespace Apex.AgenticEntityExtractor.Aggregators;
 
+/// <summary>
+/// Merges parallel extractor outputs into deduplicated entity and relationship payloads.
+/// </summary>
 public class Aggregator
 {
-    public static List<ChatMessage> AggregateRelationships(IList<List<ChatMessage>> aggregateResults)
-    {
-        var allRelationships = new List<Relationship>();
+  private static readonly JsonSerializerOptions IndentedOptions = new() { WriteIndented = true };
 
-        foreach (var result in aggregateResults)
-        {
-            try
-            {
-                // Remove markdown code fences
-                var text = result.Last().Text.Trim();
-                if (text.StartsWith("```json", StringComparison.OrdinalIgnoreCase))
-                    text = text[7..];
-                else if (text.StartsWith("```"))
-                    text = text[3..];
-                if (text.EndsWith("```"))
-                    text = text[..^3];
+  /// <summary>
+  /// Aggregates and deduplicates entity payloads from concurrent agent branches.
+  /// </summary>
+  public static List<ChatMessage> AggregateEntities(IList<List<ChatMessage>> aggregateResults)
+  {
+    var uniqueEntities = CollectAndDeduplicate<Entities, Entity>(
+      aggregateResults,
+      payloadKind: "entities",
+      container => container.Items,
+      e => new { e.EntityType, e.EntityValue });
 
-                var relationships = JsonSerializer.Deserialize<Relationships>(text.Trim());
-                if (relationships?.Items != null)
-                    allRelationships.AddRange(relationships.Items);
-            }
-            catch (JsonException) { }
-        }
+    // Re-assign sequential IDs — different agents assign conflicting IDs to the same entity.
+    var reindexedEntities = uniqueEntities
+      .Select((e, i) => new Entity { Id = $"e{i + 1}", EntityType = e.EntityType, EntityValue = e.EntityValue })
+      .ToList();
 
-        var uniqueRelationships = allRelationships
-            .GroupBy(r => new { r.Source, r.RelationshipType, r.Target })
-            .Select(g => g.First())
-            .ToList();
+    ChatMessage? originalContext = aggregateResults
+      .SelectMany(r => r)
+      .FirstOrDefault(m => m.Role == ChatRole.User);
 
-        var unifiedRelationships = new Relationships { Items = uniqueRelationships };
-        var jsonOutput = JsonSerializer.Serialize(unifiedRelationships, new JsonSerializerOptions { WriteIndented = true });
+    return BuildOutput(originalContext, new Entities { Items = reindexedEntities });
+  }
 
-        return [new ChatMessage(ChatRole.Assistant, $"```json{jsonOutput}```")];
-    }
+  /// <summary>
+  /// Aggregates and deduplicates relationship payloads from concurrent agent branches.
+  /// </summary>
+  public static List<ChatMessage> AggregateRelationships(IList<List<ChatMessage>> aggregateResults)
+  {
+    var uniqueRelationships = CollectAndDeduplicate<Relationships, Relationship>(
+      aggregateResults,
+      payloadKind: "relationships",
+      container => container.Items,
+      r => new { r.Source, r.RelationshipType, r.Target });
 
-    public static List<ChatMessage> AggregateEntities(IList<List<ChatMessage>> aggregateResults)
-    {
-        var allEntities = new List<Entity>();
+    // Re-assign sequential IDs — different agents assign conflicting IDs to the same relationship.
+    var reindexedRelationships = uniqueRelationships
+      .Select((r, i) => new Relationship { Id = $"r{i + 1}", Source = r.Source, RelationshipType = r.RelationshipType, Target = r.Target })
+      .ToList();
 
-        foreach (var result in aggregateResults)
-        {
-            try
-            {
-                // Remove markdown code fences
-                var text = result.Last().Text.Trim();
-                if (text.StartsWith("```json", StringComparison.OrdinalIgnoreCase))
-                    text = text[7..];
-                else if (text.StartsWith("```"))
-                    text = text[3..];
-                if (text.EndsWith("```"))
-                    text = text[..^3];
+    ChatMessage? entitiesContext = PayloadHelper.FindLatestJsonPayloadMessage(aggregateResults, "entities");
 
-                var entities = JsonSerializer.Deserialize<Entities>(text.Trim());
-                if (entities?.Items != null)
-                    allEntities.AddRange(entities.Items);
-            }
-            catch (JsonException) { }
-        }
+    return BuildOutput(entitiesContext, new Relationships { Items = reindexedRelationships });
+  }
 
-        var uniqueEntities = allEntities
-            .GroupBy(e => new { e.EntityType, e.EntityValue })
-            .Select(g => g.First())
-            .ToList();
+  private static List<TItem> CollectAndDeduplicate<TContainer, TItem>(
+    IList<List<ChatMessage>> aggregateResults,
+    string payloadKind,
+    Func<TContainer, List<TItem>?> itemsSelector,
+    Func<TItem, object> deduplicationKeySelector)
+  {
+    return [.. aggregateResults
+      .Select(r => PayloadHelper.TryParseLatestStructuredPayload<TContainer>(r, payloadKind))
+      .Where(c => c is not null)
+      .SelectMany(c => itemsSelector(c!) ?? [])
+      .GroupBy(deduplicationKeySelector)
+      .Select(g => g.First())];
+  }
 
-        var unifiedEntities = new Entities { Items = uniqueEntities };
-        var jsonOutput = JsonSerializer.Serialize(unifiedEntities, new JsonSerializerOptions { WriteIndented = true });
+  private static List<ChatMessage> BuildOutput<T>(ChatMessage? contextMessage, T payload)
+  {
+    var jsonOutput = JsonSerializer.Serialize(payload, IndentedOptions);
 
-        return [new ChatMessage(ChatRole.Assistant, $"```json{jsonOutput}```")];
-    }
+    var output = new List<ChatMessage>();
+    if (contextMessage is not null)
+      output.Add(contextMessage);
+
+    output.Add(new ChatMessage(ChatRole.User, $$"""
+      ```json
+      {{jsonOutput}}
+      ```
+      """));
+
+    return output;
+  }
 }
