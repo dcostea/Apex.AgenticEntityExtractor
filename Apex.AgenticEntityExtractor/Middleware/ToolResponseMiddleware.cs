@@ -1,4 +1,4 @@
-﻿using Apex.AgenticEntityExtractor.Helpers;
+﻿using Apex.AgenticEntityExtractor.OutputRenderers;
 using Microsoft.Agents.AI;
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.Caching.Distributed;
@@ -22,7 +22,7 @@ public class ToolResponseMiddleware(IDistributedCache cache, IConfiguration conf
     // Return cached result when present.
     if (cachedBytes != null)
     {
-      WorkflowHelper.RecordExternalToolEvent($"[CACHE HIT: {agent.Name}] {context.Function.Name}");
+      WorkflowHelper.EnqueueExternalToolEvent($"[CACHE HIT: {agent.Name}] {context.Function.Name}");
 
       using var doc = JsonDocument.Parse(cachedBytes);
       var cachedResult = doc.RootElement.Clone();
@@ -42,7 +42,7 @@ public class ToolResponseMiddleware(IDistributedCache cache, IConfiguration conf
         AbsoluteExpirationRelativeToNow = configuration.GetValue<TimeSpan?>("ToolResponseCacheTTL")
       };
       await cache.SetAsync(cacheKey, resultBytes, options, cancellationToken);
-      WorkflowHelper.RecordExternalToolEvent($"[CACHE STORE: {agent.Name}] {context.Function.Name}");
+      WorkflowHelper.EnqueueExternalToolEvent($"[CACHE STORE: {agent.Name}] {context.Function.Name}");
     }
 
     return result;

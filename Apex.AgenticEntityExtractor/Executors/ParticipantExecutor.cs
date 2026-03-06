@@ -39,33 +39,33 @@ public sealed partial class ParticipantExecutor(AIAgent agent, bool includeInput
 {
   private List<ChatMessage> _messages = [];
 
-  /// <summary>Phase 1: buffer incoming messages until a <see cref="TurnToken"/> triggers the agent.</summary>
+  /// <summary>Buffers incoming messages until a <see cref="TurnToken"/> triggers processing.</summary>
   [MessageHandler]
   private void HandleMessages(List<ChatMessage> messages, IWorkflowContext context)
   {
     _messages = messages;
   }
 
-  /// <summary>Phase 2: invoke the agent in streaming mode and forward the response downstream.</summary>
+  /// <summary>Runs the agent with the buffered messages, collects updates, and forwards the final response.</summary>
   [MessageHandler]
   private async ValueTask HandleTurnAsync(TurnToken token, IWorkflowContext context, CancellationToken cancellationToken)
   {
-    // No messages buffered — spurious TurnToken, nothing to do
+    // If no messages were received before the turn token, there's nothing to process or forward.
     if (_messages.Count == 0)
       return;
 
-    // Swap-and-clear to avoid reprocessing on subsequent TurnTokens
+    // Capture the current conversation history and clear the buffer to prepare for the next turn.
     List<ChatMessage> messages = _messages;
     _messages = [];
 
     // Stream the agent's response, collecting updates (and optionally emitting live events)
     List<AgentResponseUpdate> updates = [];
-    await foreach (var update in agent.RunStreamingAsync(messages, cancellationToken: cancellationToken).ConfigureAwait(false))
+    await foreach (var update in agent.RunStreamingAsync(messages, cancellationToken: cancellationToken))
     {
       updates.Add(update);
       if (token.EmitEvents is true)
       {
-        await context.AddEventAsync(new AgentResponseUpdateEvent(Id, update), cancellationToken).ConfigureAwait(false);
+        await context.AddEventAsync(new AgentResponseUpdateEvent(Id, update), cancellationToken);
       }
     }
 
@@ -74,8 +74,8 @@ public sealed partial class ParticipantExecutor(AIAgent agent, bool includeInput
     result.AddRange(updates.ToAgentResponse().Messages);
 
     // Forward the result and a fresh TurnToken to the next executor in the graph
-    await context.SendMessageAsync(result, cancellationToken: cancellationToken).ConfigureAwait(false);
-    await context.SendMessageAsync(new TurnToken(emitEvents: token.EmitEvents is true), cancellationToken: cancellationToken).ConfigureAwait(false);
+    await context.SendMessageAsync(result, cancellationToken: cancellationToken);
+    await context.SendMessageAsync(new TurnToken(emitEvents: token.EmitEvents is true), cancellationToken: cancellationToken);
   }
 
   /// <summary>Asynchronously clears all messages from the collection, resetting it to an empty state.</summary>

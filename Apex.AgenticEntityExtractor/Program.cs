@@ -1,8 +1,9 @@
 ﻿using Apex.AgenticEntityExtractor.Agents;
 using Apex.AgenticEntityExtractor.Clients;
+using Apex.AgenticEntityExtractor.OutputRenderers;
 using Apex.AgenticEntityExtractor.Middleware;
 using Apex.AgenticEntityExtractor.Workflows;
-//using Microsoft.Agents.AI.DevUI;
+using Microsoft.Agents.AI.DevUI;
 using Microsoft.Agents.AI.Hosting;
 using System.Text;
 using System.Text.Json.Serialization;
@@ -22,21 +23,45 @@ builder.Services.AddSingleton<IToolResponseMiddleware, ToolResponseMiddleware>()
 builder.Services.AddSingleton<IExtractorAgentsBuilder, ExtractorAgentsBuilder>();
 builder.Services.AddSingleton<IExtractorWorkflowBuilder, ExtractorWorkflowBuilder>();
 
+// CONFIGURE WORKFLOW RENDERER (swap implementation to change the UI layer)
+builder.Services.AddSingleton<IWorkflowRenderer, SpectreWorkflowRenderer>();
+builder.Services.AddSingleton<WorkflowHelper>();
+
 // DEVUI AGENTS REGISTRATION
 builder.AddAIAgent("ExtractorSoloAgent", (sp, _) =>
 {
   var agentBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
   return agentBuilder.BuildExtractorAgent();
 });
-builder.AddAIAgent("EntAgent", (sp, _) =>
+builder.AddAIAgent("EntAgent_1", (sp, _) =>
 {
   var agentBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
-  return agentBuilder.BuildEntitiesAgent();
+  return agentBuilder.BuildEntitiesAgent("1");
 });
-builder.AddAIAgent("RelAgent", (sp, _) =>
+builder.AddAIAgent("EntAgent_2", (sp, _) =>
 {
   var agentBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
-  return agentBuilder.BuildRelationshipsAgent();
+  return agentBuilder.BuildEntitiesAgent("2");
+});
+builder.AddAIAgent("EntAgent_3", (sp, _) =>
+{
+  var agentBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
+  return agentBuilder.BuildEntitiesAgent("3");
+});
+builder.AddAIAgent("RelAgent_1", (sp, _) =>
+{
+  var agentBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
+  return agentBuilder.BuildRelationshipsAgent("1");
+});
+builder.AddAIAgent("RelAgent_2", (sp, _) =>
+{
+  var agentBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
+  return agentBuilder.BuildRelationshipsAgent("2");
+});
+builder.AddAIAgent("RelAgent_3", (sp, _) =>
+{
+  var agentBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
+  return agentBuilder.BuildRelationshipsAgent("3");
 });
 builder.AddAIAgent("MermaidDiagramAgent", (sp, _) =>
 {
@@ -81,12 +106,12 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 builder.AddOpenAIResponses();
-////builder.AddOpenAIConversations();
+builder.AddOpenAIConversations();
 
 var app = builder.Build();
 
 app.MapOpenAIResponses();
-////app.MapOpenAIConversations();
+app.MapOpenAIConversations();
 
 app.MapControllers();
 
@@ -94,7 +119,7 @@ if (app.Environment.IsDevelopment())
 {
   app.UseSwagger();
   app.UseSwaggerUI();
-  ////app.MapDevUI();
+  app.MapDevUI();
 }
 
 app.UseHttpsRedirection();

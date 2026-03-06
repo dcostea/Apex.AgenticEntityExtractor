@@ -1,9 +1,8 @@
-using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 using Spectre.Console;
 using System.Text;
 
-namespace Apex.AgenticEntityExtractor.Helpers;
+namespace Apex.AgenticEntityExtractor.OutputRenderers;
 
 /// <summary>
 /// Pure presentation layer — every method writes to the console via Spectre.Console
@@ -30,10 +29,7 @@ internal static class WorkflowConsoleRenderer
   internal static void PrintQueryAndInputImagePreviewAndWait(ChatMessage message)
   {
     PrintQuery(message);
-    //AnsiConsole.MarkupLine("[yellow]Press Enter to continue...[/]");
     PrintInputImage(message);
-    //AnsiConsole.MarkupLine("[yellow]Press Enter to continue...[/]");
-    //Console.ReadLine();
   }
 
   internal static void PrintMermaidFlowPreviewAndWait(string mermaidFlow)
@@ -48,8 +44,6 @@ internal static class WorkflowConsoleRenderer
       .Expand();
 
     AnsiConsole.Write(panel);
-    //AnsiConsole.MarkupLine("[yellow]Press Enter to continue and start workflow execution...[/]");
-    //Console.ReadLine();
   }
 
   internal static void PrintQuery(ChatMessage message)
@@ -109,146 +103,8 @@ internal static class WorkflowConsoleRenderer
   }
 
   // ════════════════════════════════════════════════════════════════════════
-  //  SUPERSTEP EVENTS
+  //  WORKFLOW OUTPUT
   // ════════════════════════════════════════════════════════════════════════
-
-  internal static void PrintSuperstepStart(SuperStepStartedEvent stepStarted)
-  {
-    AnsiConsole.WriteLine();
-    var rule = new Rule($"[olive bold]⏳ #{stepStarted.StepNumber}[/]")
-      .RuleStyle(new Style(Color.Olive))
-      .LeftJustified();
-    AnsiConsole.Write(rule);
-
-    if (stepStarted.Data is SuperStepStartInfo startInfo && startInfo.SendingExecutors.Count != 0)
-    {
-      var executorNames = startInfo.SendingExecutors.Select(Helpers.WorkflowHelper.GetShortExecutorId);
-      AnsiConsole.MarkupLine($"  [olive]📤 Sending: {Markup.Escape(string.Join(", ", executorNames))}[/]");
-    }
-  }
-
-  internal static void PrintSuperstepCompleted(SuperStepCompletedEvent stepCompleted)
-  {
-    if (stepCompleted.Data is SuperStepCompletionInfo completionInfo)
-    {
-      if (completionInfo.ActivatedExecutors.Count != 0)
-      {
-        var executorNames = completionInfo.ActivatedExecutors.Select(Helpers.WorkflowHelper.GetShortExecutorId);
-        AnsiConsole.MarkupLine($"  [olive]📥 Activated: {Markup.Escape(string.Join(", ", executorNames))}[/]");
-      }
-
-      if (completionInfo.InstantiatedExecutors.Count != 0)
-      {
-        var executorNames = completionInfo.InstantiatedExecutors.Select(Helpers.WorkflowHelper.GetShortExecutorId);
-        AnsiConsole.MarkupLine($"  [olive]🆕 Instantiated: {Markup.Escape(string.Join(", ", executorNames))}[/]");
-      }
-    }
-
-    AnsiConsole.Write(new Rule().RuleStyle(new Style(Color.Olive)));
-  }
-
-  // ════════════════════════════════════════════════════════════════════════
-  //  EXECUTOR EVENTS
-  // ════════════════════════════════════════════════════════════════════════
-
-  internal static void PrintExecutorInvoked(string executorId, string preview = "")
-  {
-    var name = Markup.Escape(Helpers.WorkflowHelper.GetShortExecutorId(executorId));
-    if (string.IsNullOrEmpty(preview))
-      AnsiConsole.MarkupLine($"  [grey]⏳ {name}[/]");
-    else
-      AnsiConsole.MarkupLine($"  [grey]⏳ {name}: {Markup.Escape(preview)}[/]");
-  }
-
-  internal static void PrintExecutorCompleted(string executorId, string preview = "")
-  {
-    var name = Markup.Escape(Helpers.WorkflowHelper.GetShortExecutorId(executorId));
-    if (string.IsNullOrEmpty(preview))
-      AnsiConsole.MarkupLine($"  [grey]✓ {name}[/]");
-    else
-      AnsiConsole.MarkupLine($"  [grey]✓ {name}: {Markup.Escape(preview)}[/]");
-  }
-
-  internal static void PrintExecutorFailed(string executorId, string? errorMessage)
-  {
-    var shortError = Helpers.WorkflowHelper.FirstLine(errorMessage);
-    AnsiConsole.MarkupLine($"  [red]❌ {Markup.Escape(Helpers.WorkflowHelper.GetShortExecutorId(executorId))} FAILED[/]");
-    if (!string.IsNullOrWhiteSpace(shortError))
-    {
-      AnsiConsole.MarkupLine($"    [red]{Markup.Escape(shortError)}[/]");
-    }
-  }
-
-  // ════════════════════════════════════════════════════════════════════════
-  //  AGENT STREAMING
-  // ════════════════════════════════════════════════════════════════════════
-
-  internal static int PrintAgentStreamToken(AgentResponseUpdateEvent e, ref string? lastAgentId, Dictionary<string, string> agentColorMap)
-  {
-    if (string.IsNullOrEmpty(e.Update.Text))
-      return 0;
-
-    string agentName = Helpers.WorkflowHelper.GetShortExecutorId(e.ExecutorId);
-    var color = Helpers.WorkflowHelper.GetOrAssignAgentColor(agentName, agentColorMap);
-
-    if (agentName != lastAgentId)
-    {
-      lastAgentId = agentName;
-      AnsiConsole.WriteLine();
-      AnsiConsole.MarkupLine($"  [{color} bold]🤖 [{Markup.Escape(agentName)}][/]");
-    }
-
-    AnsiConsole.Markup($"[{color}]{Markup.Escape(e.Update.Text)}[/]");
-    return 1;
-  }
-
-  // ════════════════════════════════════════════════════════════════════════
-  //  WORKFLOW OUTPUT & ERRORS
-  // ════════════════════════════════════════════════════════════════════════
-
-  internal static void PrintFinalOutput(WorkflowOutputEvent output)
-  {
-    AnsiConsole.WriteLine();
-
-    var messages = output.As<List<ChatMessage>>();
-    var finalText = messages?.LastOrDefault()?.Text;
-    if (!string.IsNullOrWhiteSpace(finalText))
-    {
-      var panel = new Panel($"[white]{Markup.Escape(finalText)}[/]")
-        .Header("[green bold]Final Output[/]")
-        .BorderColor(Color.Green)
-        .Padding(1, 0)
-        .Expand();
-      AnsiConsole.Write(panel);
-    }
-    else
-    {
-      var panel = new Panel("[red]⚠ No final output text found[/]")
-        .Header("[green bold]Final Output[/]")
-        .BorderColor(Color.Red)
-        .Padding(1, 0)
-        .Expand();
-      AnsiConsole.Write(panel);
-    }
-  }
-
-  internal static void PrintWorkflowError(WorkflowErrorEvent error)
-  {
-    AnsiConsole.WriteLine();
-
-    var errorMessage = error.Data switch
-    {
-      Exception ex => ex.Message,
-      _ => error.Data?.ToString() ?? "Unknown error"
-    };
-
-    var panel = new Panel($"[red]✘ {Markup.Escape(errorMessage)}[/]")
-      .Header("[red bold]Workflow Error[/]")
-      .BorderColor(Color.Red)
-      .Padding(1, 0)
-      .Expand();
-    AnsiConsole.Write(panel);
-  }
 
   internal static void PrintFinalResponsePanel(string? outputText)
   {
@@ -281,7 +137,7 @@ internal static class WorkflowConsoleRenderer
       var sorted = executorDurations.OrderByDescending(kvp => kvp.Value);
       foreach (var kvp in sorted)
       {
-        chart.AddItem(Helpers.WorkflowHelper.GetShortExecutorId(kvp.Key), Math.Round(kvp.Value.TotalSeconds, 2), Color.Yellow);
+        chart.AddItem(WorkflowHelper.GetShortExecutorId(kvp.Key), Math.Round(kvp.Value.TotalSeconds, 2), Color.Yellow);
       }
 
       AnsiConsole.Write(chart);
@@ -300,6 +156,41 @@ internal static class WorkflowConsoleRenderer
       .Padding(1, 0);
     AnsiConsole.Write(summaryPanel);
     AnsiConsole.WriteLine();
+  }
+
+  // ════════════════════════════════════════════════════════════════════════
+  //  DASHBOARD LAYOUT
+  // ════════════════════════════════════════════════════════════════════════
+
+  internal static Layout BuildDashboardLayout(string header)
+  {
+    var root = new Layout("Root")
+      .SplitRows(
+        new Layout("Top").Size(3),
+        new Layout("Main")
+          .SplitColumns(
+            new Layout("LeftColumn").Ratio(1)
+              .SplitRows(
+                new Layout("Left").Ratio(3),
+                new Layout("ReviewStatus").Ratio(1)),
+            new Layout("Middle").Ratio(1),
+            new Layout("Right").Ratio(1)
+              .SplitRows(
+                new Layout("Tools").Ratio(1),
+                new Layout("Metrics").Ratio(2))));
+
+    root["Top"].Update(new Panel($"[yellow bold]{Markup.Escape(header)}[/]")
+      .Border(BoxBorder.Double)
+      .BorderColor(Color.Yellow)
+      .Expand());
+
+    root["Left"].Update(BuildDashboardPanel("🤖 Latest Output", "Waiting for model output...", Color.Cyan1));
+    root["ReviewStatus"].Update(BuildDashboardPanel("🔄 Terminator Status", "Waiting for terminator review status...", Color.Yellow));
+    root["Middle"].Update(BuildDashboardPanel("📋 Events", "Waiting for events...", Color.Grey));
+    root["Tools"].Update(BuildDashboardPanel("🔧 Tools", "Waiting for tool calls/responses...", Color.Blue));
+    root["Metrics"].Update(BuildDashboardPanel("📊 Metrics", "Elapsed: 0.0s", Color.Gold1));
+
+    return root;
   }
 
   // ════════════════════════════════════════════════════════════════════════
@@ -324,81 +215,66 @@ internal static class WorkflowConsoleRenderer
       .Expand();
   }
 
-  internal static void UpdateDashboardPanels(
-    Layout root,
-    List<string> executorLines,
-    string outputText,
-    List<string> toolLines,
-    List<string> reviewLines,
-    Dictionary<string, TimeSpan> executorDurations,
-    TimeSpan elapsed,
-    int tokenCount,
-    int superStep,
-    string? activeAgent,
-    string status,
-    Dictionary<string, int> agentTokenCounts,
-    Dictionary<string, int> executorInvocationCounts,
-    Dictionary<int, TimeSpan> superStepDurations,
-    HashSet<string> uniqueAgents)
+  internal static void UpdateDashboardPanels(Layout root, DashboardState state, string cachedColoredText, string status)
   {
     int availableHeight = Math.Max(Console.WindowHeight - 3, 10);
     int maxExecutorLines = Math.Max(availableHeight - 3, 5);
     int maxOutputLines = Math.Max(availableHeight - 3, 5);
 
-    var executorsText = executorLines.Count == 0
+    var executorsText = state.EventLines.Count == 0
       ? "Waiting for steps..."
-      : string.Join('\n', executorLines.Count > maxExecutorLines
-        ? executorLines.Skip(executorLines.Count - maxExecutorLines)
-        : executorLines);
+      : string.Join('\n', state.EventLines.Count > maxExecutorLines
+        ? state.EventLines.Skip(state.EventLines.Count - maxExecutorLines)
+        : state.EventLines);
 
     // outputText contains pre-formatted Spectre markup (per-agent colors)
     string leftPanelMarkup;
-    if (string.IsNullOrWhiteSpace(outputText))
+    if (string.IsNullOrWhiteSpace(cachedColoredText))
     {
       leftPanelMarkup = "[grey]Waiting for model output...[/]";
     }
     else
     {
-      var lines = outputText.Split('\n');
+      var lines = cachedColoredText.Split('\n');
       leftPanelMarkup = lines.Length > maxOutputLines
         ? string.Join('\n', lines[^maxOutputLines..])
-        : outputText;
+        : cachedColoredText;
     }
 
     int maxToolLines = Math.Max(availableHeight / 2 - 3, 5);
-    var toolsText = toolLines.Count == 0
+    var toolsText = state.ToolLines.Count == 0
       ? "Waiting for tool calls/responses..."
-      : string.Join('\n', toolLines.Count > maxToolLines
-        ? toolLines.Skip(toolLines.Count - maxToolLines)
-        : toolLines);
+      : string.Join('\n', state.ToolLines.Count > maxToolLines
+        ? state.ToolLines.Skip(state.ToolLines.Count - maxToolLines)
+        : state.ToolLines);
 
     // ── Metrics ──
-    double tokPerSec = elapsed.TotalSeconds > 0 ? tokenCount / elapsed.TotalSeconds : 0;
+    double tokPerSec = state.Elapsed.Elapsed.TotalSeconds > 0 ? state.TokenCount / state.Elapsed.Elapsed.TotalSeconds : 0;
 
     var metricsLines = new List<string>
     {
       $"Status: {status}",
-      $"Elapsed: {elapsed.TotalSeconds:F1}s",
-      $"Active: {activeAgent ?? "-"}",
-      $"Agents: {uniqueAgents.Count}",
-      $"Tokens: ~{tokenCount}  |  {tokPerSec:F1} tok/s",
+      $"Elapsed: {state.Elapsed.Elapsed.TotalSeconds:F1}s",
+      $"Active: {state.ActiveAgent ?? "-"}",
+      $"Agents: {state.UniqueAgents.Count}",
+      $"Tokens: ~{state.TokenCount}  |  {tokPerSec:F1} tok/s",
     };
 
-    if (executorDurations.Count > 0)
+    if (state.ExecutorDurations.Count > 0)
     {
       metricsLines.Add("Executor (duration / invocations / tokens):");
-      foreach (var kvp in executorDurations.OrderByDescending(kvp => kvp.Value))
+      foreach (var kvp in state.ExecutorDurations.OrderByDescending(kvp => kvp.Value))
       {
-        var shortId = Helpers.WorkflowHelper.GetShortExecutorId(kvp.Key);
-        var executorInvocations = executorInvocationCounts.TryGetValue(kvp.Key, out var val) ? $"{val}x" : "-";
-        var tokens = agentTokenCounts.TryGetValue(shortId, out var t) ? $"~{t} tok" : "-";
+        var shortId = WorkflowHelper.GetShortExecutorId(kvp.Key);
+        var executorInvocations = state.ExecutorInvocationCounts.TryGetValue(kvp.Key, out var val) ? $"{val}x" : "-";
+        var tokens = state.AgentTokenCounts.TryGetValue(shortId, out var t) ? $"~{t} tok" : "-";
         metricsLines.Add($"  {shortId}: {kvp.Value.TotalSeconds:F2}s / {executorInvocations} / {tokens}");
       }
     }
 
-    if (superStepDurations.Count > 0)
+    if (state.SuperStepDurations.Count > 0)
     {
-      var stepsDurations = superStepDurations
+      var stepsDurations = state.SuperStepDurations
         .OrderBy(kvp => kvp.Key)
         .ToList();
 
@@ -407,39 +283,31 @@ internal static class WorkflowConsoleRenderer
     }
 
     // ── Dynamic Output panel header ──
-    var outputTitle = activeAgent is not null
-      ? $"🤖 {activeAgent}"
+    var outputTitle = state.ActiveAgent is not null
+      ? $"🤖 {state.ActiveAgent}"
       : "🤖 Latest Output";
 
     root["Left"].Update(BuildDashboardPanelMarkup(outputTitle, leftPanelMarkup, Color.Cyan1));
-    root["Middle"].Update(BuildDashboardPanel($"📋 SuperSteps ({superStep}) / Executors ({executorInvocationCounts.Count})", executorsText, Color.Grey));
-    root["Tools"].Update(BuildDashboardPanel($"🔧 Tools ({toolLines.Count})", toolsText, Color.Blue));
+    root["Middle"].Update(BuildDashboardPanel($"📋 SuperSteps ({state.SuperStep}) / Executors ({state.ExecutorInvocationCounts.Count})", executorsText, Color.Grey));
+    root["Tools"].Update(BuildDashboardPanel($"🔧 Tools ({state.ToolLines.Count})", toolsText, Color.Blue));
     root["Metrics"].Update(BuildDashboardPanel("📊 Metrics", string.Join('\n', metricsLines), Color.Gold1));
 
-    var reviewText = reviewLines.Count == 0
+    var reviewText = state.ReviewLines.Count == 0
       ? "Waiting for review loop..."
-      : string.Join('\n', reviewLines);
-    root["ReviewStatus"].Update(BuildDashboardPanel($"🔄 Terminator Status ({reviewLines.Count})", reviewText, Color.Yellow));
+      : string.Join('\n', state.ReviewLines);
+    root["ReviewStatus"].Update(BuildDashboardPanel($"🔄 Terminator Status ({state.ReviewLines.Count})", reviewText, Color.Yellow));
   }
 
   // ════════════════════════════════════════════════════════════════════════
   //  POST-DASHBOARD FULL LOG
   // ════════════════════════════════════════════════════════════════════════
 
-  internal static void PrintPostDashboardLog(
-    List<string> eventLines,
-    string outputText,
-    string? yieldedOutputText,
-    Dictionary<string, TimeSpan> executorDurations,
-    TimeSpan totalTime,
-    int tokenCount,
-    Dictionary<string, StringBuilder>? perAgentOutput = null,
-    Dictionary<string, string>? agentColorMap = null)
+  internal static void PrintPostDashboardLog(DashboardState state)
   {
     // ── Full event history ──
-    if (eventLines.Count > 0)
+    if (state.FullEventLog.Count > 0)
     {
-      var eventLogContent = string.Join('\n', eventLines.Select(l => $"[grey]{Markup.Escape(l)}[/]"));
+      var eventLogContent = string.Join('\n', state.FullEventLog.Select(l => $"[grey]{Markup.Escape(l)}[/]"));
       var eventLogPanel = new Panel(eventLogContent)
         .Header("[grey bold]Full Event Log[/]")
         .BorderColor(Color.Grey)
@@ -450,16 +318,16 @@ internal static class WorkflowConsoleRenderer
     }
 
     // ── Per-agent output panels ──
-    if (perAgentOutput is { Count: > 0 })
+    if (state.PerAgentOutput is { Count: > 0 })
     {
-      PrintPerAgentOutputPanels(perAgentOutput, agentColorMap);
+      PrintPerAgentOutputPanels(state.PerAgentOutput, state.AgentColorMap);
     }
 
     // ── Final output (yielded output) ──
-    PrintFinalResponsePanel(yieldedOutputText);
+    PrintFinalResponsePanel(state.YieldedOutputText);
 
     // ── Timing summary ──
-    PrintTimingSummary(executorDurations, totalTime, tokenCount);
+    PrintTimingSummary(state.ExecutorDurations, state.Elapsed.Elapsed, state.TokenCount);
   }
 
   private static void PrintPerAgentOutputPanels(

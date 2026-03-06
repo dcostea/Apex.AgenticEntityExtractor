@@ -13,6 +13,16 @@ You will find these in the conversation history:
 - Mermaid edge format: `id1 -->|relationship_type| id2` (e.g., `e2 -->|works_for| e4`)
 - Respond with ONLY one fenced mermaid block.
 
+## HANDLING REVIEW FEEDBACK
+- If the conversation contains **REVIEWER FEEDBACK** with `ERRORS FOUND`, you MUST address **every** reported error in your rebuilt diagram.
+- **Missing Entities** → add the listed nodes.
+- **Missing Relationships** → add the listed edges.
+- **Invented Entities/Relationships** → remove them.
+- **Incorrect Direction** → swap source and target.
+- **Ontology Violations** → use the correct type from the ontology.
+- **Formatting/Syntax Errors** → fix the Mermaid syntax.
+- After addressing feedback, output a complete corrected diagram — do NOT repeat or reference the errors.
+
 ## REQUIREMENTS
 - Always include all entities as nodes.
 - Use the `id` field from each entity as the Mermaid node ID — do NOT invent your own IDs.

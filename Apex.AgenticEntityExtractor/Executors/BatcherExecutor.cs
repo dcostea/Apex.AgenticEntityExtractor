@@ -27,7 +27,7 @@ namespace Apex.AgenticEntityExtractor.Executors;
 /// executor is reused across workflow runs, though it holds no mutable state.
 /// </summary>
 [SendsMessage(typeof(List<ChatMessage>))]
-internal sealed partial class MessageBatcherExecutor(string executorId)
+internal sealed partial class BatcherExecutor(string executorId)
   : Executor(executorId, declareCrossRunShareable: true), IResettableExecutor
 {
   [MessageHandler]

@@ -1,7 +1,7 @@
 # Executor Inventory Report
 
 > Auto-generated analysis of all custom `Executor`-derived classes in  
-> `Apex.AgenticEntityExtractor.Executors` (7 executors).
+> `Apex.AgenticEntityExtractor.Executors` (6 executors).
 
 ---
 
@@ -14,7 +14,6 @@
 | **AggregatorExecutor** | Conventional | Intermediate aggregator | ❌ | `SendMessage` (forward) | Accumulator |
 | **ConcurrentAggregatorExecutor** | Conventional | Terminal aggregator | ❌ | `YieldOutput` | Accumulator |
 | **ParticipantExecutor** | Agent-fueled | Agent wrapper | ✅ | `SendMessage` (forward) | Buffer |
-| **MermaidValidatorExecutor** | Conventional | Deterministic reviewer | ✅ | `SendMessage` (forward) | Buffer |
 | **RefinementExecutor** | Hybrid | Orchestrator hub | ✅ | `SendMessage` (targeted) + `YieldOutput` | Buffer + snapshot |
 
 ---
@@ -89,22 +88,7 @@
 
 ---
 
-### 6. MermaidValidatorExecutor
-
-- **Processing type:** Conventional code — **deterministic rule-based validation**, no LLM.
-- **Graph role:** Structural diagram reviewer. Can replace or supplement an LLM reviewer participant with zero hallucination risk for structural checks.
-- **Message handlers (2):**
-  - `HandleMessages(List<ChatMessage>)` — sync, buffers incoming messages.
-  - `HandleTurnAsync(TurnToken)` — async, runs validation pipeline, forwards approval or error list.
-- **Two-phase pattern:** Yes — buffer messages, validate on `TurnToken`.
-- **Output mechanism:** `SendMessageAsync` (forward `List<ChatMessage>` + `TurnToken`).
-- **State:** `_messages` buffer.
-- **Validation pipeline:** Extract Mermaid code block → deserialise entity/relationship JSON → parse Mermaid nodes and edges → cross-reference against structured data → emit `"APPROVED"` or `"ERRORS FOUND\n..."`.
-- **Notable:** Heaviest conventional logic (~150 lines of parsing/validation). Uses regex for Mermaid parsing and `System.Text.Json` for structured data extraction. Contains substantial static helper methods.
-
----
-
-### 7. RefinementExecutor
+### 6. RefinementExecutor
 
 - **Processing type:** **Hybrid** — conventional orchestration logic that routes to agent-backed participants. Does not invoke `AIAgent` directly but controls which participant runs next.
 - **Graph role:** Star-topology hub / group chat orchestrator. Central controller that manages turn-taking, termination, and output selection.
@@ -115,23 +99,23 @@
 - **Output mechanism:** Both `SendMessageAsync` (**targeted** to specific executor ID) and `YieldOutputAsync` (terminal, on termination).
 - **State:** `_messages` buffer + `_bestMermaidOutput` snapshot (captures the last valid Mermaid diagram as fallback).
 - **Message routing:** Only executor using **targeted sends** (`context.SendMessageAsync(messages, targetExecutor.Id, ...)`), routing to a specific participant rather than broadcasting to all edges.
-- **Notable:** Custom equivalent of the framework's internal `GroupChatHost`. Depends on `ApprovalRoundRobinGroupChatManager` for termination checks, history filtering, and next-agent selection. Resets the manager's iteration counter in `ResetAsync`.
+- **Notable:** Custom equivalent of the framework's internal `GroupChatHost`. Depends on `ApprovalManager` for termination checks, history filtering, and next-agent selection. Resets the manager's iteration counter in `ResetAsync`.
 
 ---
 
 ## Cross-Cutting Observations
 
 ### Two-Phase Message Protocol
-Five of seven executors follow the **buffer → TurnToken trigger** pattern. The exceptions are `MessageBatcherExecutor` (stateless passthrough) and both aggregators (self-triggered on count threshold). The two-phase protocol decouples data arrival from processing activation, preventing premature execution on partial input.
+Four of six executors follow the **buffer → TurnToken trigger** pattern. The exceptions are `MessageBatcherExecutor` (stateless passthrough) and both aggregators (self-triggered on count threshold). The two-phase protocol decouples data arrival from processing activation, preventing premature execution on partial input.
 
 ### State & Lifecycle
-All seven executors declare `declareCrossRunShareable: true` and implement `IResettableExecutor`. Only `MessageBatcherExecutor` has a true no-op reset; all others clear buffers or accumulators. `RefinementExecutor` additionally resets external state (`manager.CurrentIterationCount`).
+All six executors declare `declareCrossRunShareable: true` and implement `IResettableExecutor`. Only `MessageBatcherExecutor` has a true no-op reset; all others clear buffers or accumulators. `RefinementExecutor` additionally resets external state (`manager.CurrentIterationCount`).
 
 ### Agent Invocation
-Only `ParticipantExecutor` directly calls `AIAgent.RunStreamingAsync`. `RefinementExecutor` orchestrates agents indirectly by routing to `ParticipantExecutor` instances. The remaining five executors are pure conventional code with no LLM interaction.
+Only `ParticipantExecutor` directly calls `AIAgent.RunStreamingAsync`. `RefinementExecutor` orchestrates agents indirectly by routing to `ParticipantExecutor` instances. The remaining four executors are pure conventional code with no LLM interaction.
 
 ### Output Mechanism Split
-- **`SendMessageAsync`** (forwarding): `FanOutExecutor`, `MessageBatcherExecutor`, `AggregatorExecutor`, `ParticipantExecutor`, `MermaidValidatorExecutor`
+- **`SendMessageAsync`** (forwarding): `FanOutExecutor`, `MessageBatcherExecutor`, `AggregatorExecutor`, `ParticipantExecutor`
 - **`YieldOutputAsync`** (terminal): `ConcurrentAggregatorExecutor`
 - **Both**: `RefinementExecutor` (targeted sends during orchestration, yield on termination)
 

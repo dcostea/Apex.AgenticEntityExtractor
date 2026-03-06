@@ -1,146 +1,366 @@
-﻿## Flow diagram
+# Apex Agentic Entity Extractor
 
-```mermaid
-graph TD
-    Input["<b>External Input</b><br/>List&lt;ChatMessage&gt;"]
+A progressive, hands-on learning project that teaches **multi-agent orchestration patterns** using the [Microsoft Agents AI Workflows SDK](https://learn.microsoft.com/dotnet/api/microsoft.agents.ai.workflows). Starting from a single "god" agent and incrementally decomposing it into concurrent fan-out/fan-in pipelines and star-topology group chats — all the way to building a fully custom workflow graph from scratch.
 
-    subgraph "ENTITY EXTRACTION"
-        EFO["<b>EntityFanOut</b><br/><i>FanOutChatProtocolExecutor</i><br/>TakeTurnAsync(messages)"]
-        
-        EA1["<b>EntitiesAgent_1</b><br/><i>AIAgent</i>"]
-        EA2["<b>EntitiesAgent_2</b><br/><i>AIAgent</i>"]
-        EA3["<b>EntitiesAgent_3</b><br/><i>AIAgent</i>"]
-        
-        EB1["<b>Batch/EntitiesAgent_1</b><br/><i>MessageBatcherExecutor</i>"]
-        EB2["<b>Batch/EntitiesAgent_2</b><br/><i>MessageBatcherExecutor</i>"]
-        EB3["<b>Batch/EntitiesAgent_3</b><br/><i>MessageBatcherExecutor</i>"]
-        
-        BARRIER1{{"Fan-In Barrier"}}
-        
-        EAGG["<b>EntityAggregator</b><br/><i>AggregatorExecutor</i><br/>AggregateEntities()"]
-    end
+> **Target audience:** developers who want to understand *how* the framework wires agents together — not just use the high-level helpers, but build the plumbing themselves.
 
-    subgraph "RELATIONSHIP EXTRACTION"
-        RFO["<b>RelationshipFanOut</b><br/><i>FanOutChatProtocolExecutor</i><br/>TakeTurnAsync(messages)"]
-        
-        RA1["<b>RelationshipsAgent_1</b><br/><i>AIAgent</i>"]
-        RA2["<b>RelationshipsAgent_2</b><br/><i>AIAgent</i>"]
-        RA3["<b>RelationshipsAgent_3</b><br/><i>AIAgent</i>"]
-        
-        RB1["<b>Batch/RelationshipsAgent_1</b><br/><i>MessageBatcherExecutor</i>"]
-        RB2["<b>Batch/RelationshipsAgent_2</b><br/><i>MessageBatcherExecutor</i>"]
-        RB3["<b>Batch/RelationshipsAgent_3</b><br/><i>MessageBatcherExecutor</i>"]
-        
-        BARRIER2{{"Fan-In Barrier"}}
-        
-        RAGG["<b>RelationshipAggregator</b><br/><i>AggregatorExecutor</i><br/>AggregateRelationships()"]
-    end
+---
 
-    subgraph "MERMAID REFINEMENT"
-        HOST["<b>RefinementExecutor (Orchestrator)</b><br/><i>RefinementChatProtocolExecutor</i><br/>TakeTurnAsync(messages)<br/>round-robin<br/>termination"]
-        BUILDER["<b>Participant(MermaidBuilder)</b><br/><i>ParticipantChatProtocolExecutor</i><br/>includeInputInOutput: true"]
-        REVIEWER["<b>Participant(MermaidReviewer)</b><br/><i>ParticipantChatProtocolExecutor</i><br/>includeInputInOutput: true"]
-    end
+## What This Project Teaches
 
-    Output["Workflow Output<br/><i>YieldOutputAsync</i>"]
+The project solves a single problem (entity/relationship extraction → Mermaid diagram) using **five increasingly sophisticated orchestration strategies**, each reusing the same agents but wiring them differently:
 
-    Input -->|"List&lt;ChatMessage&gt;<br/>TurnToken"| EFO
-    EFO -->|"fan-out edge"| EA1
-    EFO -->|"fan-out edge"| EA2
-    EFO -->|"fan-out edge"| EA3
-    EA1 --> EB1
-    EA2 --> EB2
-    EA3 --> EB3
-    EB1 --> BARRIER1
-    EB2 --> BARRIER1
-    EB3 --> BARRIER1
-    BARRIER1 --> EAGG
+| # | Strategy | Orchestration Style | Key Concept |
+|---|----------|-------------------|-------------|
+| 0 | **Single Agent** | No workflow | One prompt does everything ("god" agent) |
+| 1 | **Sequential Pipeline** | `AgentWorkflowBuilder.BuildSequential` | Decompose into specialised agents |
+| 2 | **Concurrent Sub-Workflows** | `AgentWorkflowBuilder.BuildConcurrent` + `Workflow.AsAIAgent` | Fan-out/fan-in, sub-workflow composition |
+| 3 | **Custom Sub-Workflows** | Manual `WorkflowBuilder` + custom executors, composed via `AsAIAgent` | Same topologies as #2, but hand-wired |
+| 4 | **Fully Custom Pipeline** | Single flat `WorkflowBuilder` graph with all stages | No sub-workflows, no `AsAIAgent` — everything in one graph |
 
-    EAGG -->|"List&lt;ChatMessage&gt;<br/>[context, entities]<br/>SendMessageAsync<br/>TurnToken"| RFO
+The progression from Strategy 0 → 4 mirrors a real-world evolution: start simple, identify bottlenecks, add parallelism, then take full control when the high-level helpers no longer fit.
 
-    RFO -->|"fan-out edge"| RA1
-    RFO -->|"fan-out edge"| RA2
-    RFO -->|"fan-out edge"| RA3
-    RA1 --> RB1
-    RA2 --> RB2
-    RA3 --> RB3
-    RB1 --> BARRIER2
-    RB2 --> BARRIER2
-    RB3 --> BARRIER2
-    BARRIER2 --> RAGG
+---
 
-    RAGG -->|"List&lt;ChatMessage&gt;<br/>[entities, relationships]<br/>SendMessageAsync<br/>TurnToken"| HOST
+## The Extraction Pipeline
 
-    HOST -->|"messages<br/>TurnToken"| BUILDER
-    BUILDER -->|"input<br/>response<br/>TurnToken"| HOST
-    HOST -->|"messages<br/>TurnToken"| REVIEWER
-    REVIEWER -->|"input<br/>response<br/>TurnToken"| HOST
+Regardless of strategy, the logical pipeline is:
 
-    HOST --> Output
+```
+Input (text + image)
+    │
+    ▼
+┌─────────────────────────────┐
+│  Stage 1: Entity Extraction │  3 agents in parallel, deduplicate
+└─────────────┬───────────────┘
+              │
+              ▼
+┌──────────────────────────────────┐
+│  Stage 2: Relationship Extraction│  3 agents in parallel, deduplicate
+└─────────────┬────────────────────┘
+              │
+              ▼
+┌──────────────────────────────────┐
+│  Stage 3: Mermaid Refinement     │  Builder ↔ Reviewer group chat
+└─────────────┬────────────────────┘
+              │
+              ▼
+         Mermaid Diagram
 ```
 
-## Entities and Relationships Diagram
+Entity and reviewer agents use **ontology tools** (loaded from JSON files and cached via `IDistributedCache`) to constrain outputs to permitted entity/relationship types.
 
-### Run 1
+---
 
-```mermaid
-graph TD                                               
-e1[event: Amsterdam Tech Conference]                   
-e2[temporal: 1 Oct 2025]                               
-e3[person: Dr. Michael Anders]                         
-e4[person: Daniel Costea]                              
-e5[person: Sarah Blunt]                                
-e6[location: Amsterdam Convention Center]              
-e7[person: Elena]                                      
-e8[temporal: last Thursday]                            
-e9[event: AI integration roadmap discussion]           
-e10[temporal: November]                                
-e12[event: keynote on optimizing distributed inference]
-e13[person: James Cooper]                              
-e14[organization: Innovatech Solutions]                
-e15[location: The Hague]                               
-e16[temporal: next week's sprint review]               
-e1 -->|occurs_at| e2                                   
-e1 -->|located_at| e6                                  
-e3 -->|participates_in| e1                             
-e3 -->|participates_in| e12                            
-e4 -->|participates_in| e1                             
-e5 -->|participates_in| e1                             
-e13 -->|works_for| e14                                 
-e14 -->|located_at| e15                                
-e9 -->|occurs_at| e10                                  
-e12 -->|part_of| e1                                    
+## Key Framework Concepts
+
+### Executor
+
+The fundamental unit of work in a workflow graph. An executor is a **node** that receives typed messages, processes them, and sends typed messages downstream.
+
+```
+[Executor A] ──edge──→ [Executor B] ──edge──→ [Executor C]
 ```
 
-### Run 2
-```mermaid
-graph TD                                      
-e1[event: Amsterdam Tech Conference 2025]     
-e2[temporal: 1 Oct 2025]                      
-e3[person: Dr. Michael Anders]                
-e4[person: Elena]                             
-e5[person: Daniel Costea]                     
-e6[person: Sarah Blunt]                       
-e7[person: James Cooper]                      
-e8[organization: Innovatech Solutions]        
-e9[location: The Hague]                       
-e10[location: Amsterdam]                      
-e11[location: Amsterdam Convention Center]    
-e12[temporal: last Thursday]                  
-e13[temporal: November]                       
-e14[temporal: next week's sprint review]      
-e15[event: AI integration roadmap discussion] 
-                                              
-e1 -->|occurs_at| e2                          
-e1 -->|located_at| e11                        
-e3 -->|participates_in| e1                    
-e3 -->|located_at| e11                        
-e5 -->|participates_in| e1                    
-e5 -->|located_at| e11                        
-e6 -->|participates_in| e1                    
-e6 -->|located_at| e11                        
-e7 -->|works_for| e8                          
-e8 -->|located_at| e9                         
-e15 -->|occurs_at| e13                        
-e14 -->|occurs_at| e15                        
+Executors declare their message contracts via attributes:
+- **`[MessageHandler]`** — marks a method as a handler for a specific message type. The framework's source generator discovers handlers by **parameter type**, not method name.
+- **`[SendsMessage(typeof(T))]`** — declares this executor can send messages of type `T`.
+- **`[YieldsOutput(typeof(T))]`** — declares this executor can yield final workflow output of type `T`.
+
+The containing class must be `partial` (for source generation) and derive from `Executor`.
+
+**Valid handler signatures** (from the framework docs):
 ```
+void Handler(TMessage, IWorkflowContext)
+void Handler(TMessage, IWorkflowContext, CancellationToken)
+ValueTask Handler(TMessage, IWorkflowContext)
+ValueTask Handler(TMessage, IWorkflowContext, CancellationToken)
+TResult Handler(TMessage, IWorkflowContext)
+ValueTask<TResult> Handler(TMessage, IWorkflowContext, CancellationToken)
+```
+
+> **Note:** `IWorkflowContext` is always required in the signature, even if unused — it's a framework constraint enforced by the source generator.
+
+### Edge
+
+A **directed connection** between two executors (or between an executor and an `AIAgent`). Edges define message routes — when executor A sends a message, it travels along all outgoing edges to reach connected executors.
+
+Edge types used in this project:
+- **`AddEdge(source, target)`** — standard directed edge.
+- **`AddFanOutEdge(source, [targets])`** — broadcasts messages from one source to multiple targets.
+- **`AddFanInBarrierEdge([sources], target)`** — waits for all sources to complete before delivering to target.
+
+### AIAgent
+
+The framework's abstraction for an LLM-backed agent. Created via `IChatClient.AsAIAgent(options)` with a name, system instructions, tools, and chat options. In a workflow graph, an `AIAgent` is wrapped as an executor internally by the framework.
+
+### ExecutorBinding
+
+A handle to an executor's identity within the graph. Used when you need to reference an executor by its `Id` — for example, in **targeted sends** where you route a message to a specific executor rather than broadcasting to all edges:
+
+```csharp
+await context.SendMessageAsync(messages, targetExecutor.Id, cancellationToken);
+```
+
+### TurnToken
+
+A coordination signal — **not** a data message. Executors that use the **two-phase protocol** (buffer data first, act on `TurnToken`) use this to separate "data has arrived" from "now process it." This prevents premature execution on partial input in fan-out scenarios.
+
+### WorkflowBuilder vs AgentWorkflowBuilder
+
+| | `AgentWorkflowBuilder` | `WorkflowBuilder` |
+|---|---|---|
+| **Level** | High-level helpers | Low-level graph API |
+| **Creates** | `BuildSequential`, `BuildConcurrent`, `CreateGroupChatBuilderWith` | Manual `AddEdge`, `AddFanOutEdge`, `AddFanInBarrierEdge` |
+| **Control** | Framework wires executors/edges internally | You create every executor and edge explicitly |
+| **When to use** | Standard patterns suffice | Custom topologies, targeted sends, inter-stage handoffs |
+
+### Workflow.AsAIAgent
+
+Wraps an entire `Workflow` as a single `AIAgent`. This enables **workflow composition** — an inner workflow with complex topology appears as one agent from the outer workflow's perspective.
+
+### IResettableExecutor & Cross-Run State
+
+Executors declared with `declareCrossRunShareable: true` persist across workflow runs for reuse. They implement `IResettableExecutor` to clear mutable state between runs, preventing stale data leakage.
+
+---
+
+## Orchestration Strategies In Detail
+
+### Strategy 0 — Single Agent (`/extract/single-agent`)
+
+A single "god" agent with one monolithic prompt handles entity extraction, relationship extraction, and diagram generation in a single LLM call.
+
+**Pros:** Simplest possible implementation.  
+**Cons:** No parallelism, no specialisation, prompt bloat, hard to iterate on individual stages.
+
+### Strategy 1 — Sequential Pipeline (`/extract/workflow/sequential`)
+
+Three specialised agents chained via `AgentWorkflowBuilder.BuildSequential`:
+
+```
+[Entity Agent] ──→ [Relationship Agent] ──→ [Mermaid Agent] ──→ Output
+```
+
+Each agent receives the full conversation history from all previous agents. No custom executors needed.
+
+### Strategy 2 — Concurrent Sub-Workflows (`/extract/workflow/as-agents`)
+
+Each stage is a concurrent workflow (3 agents in parallel) or a group chat, built with `AgentWorkflowBuilder` high-level helpers and wrapped via `Workflow.AsAIAgent`:
+
+```
+[BuildConcurrent → AsAIAgent] ──→ [BuildConcurrent → AsAIAgent] ──→ [GroupChat → AsAIAgent] ──→ Output
+```
+
+The outer pipeline uses `BuildSequential` — it doesn't know (or care) that each "agent" is actually a full concurrent workflow internally.
+
+### Strategy 3 — Custom Sub-Workflows (`/extract/workflow/sub-workflows`)
+
+Functionally identical to Strategy 2, but each sub-workflow is hand-wired using `WorkflowBuilder`, custom executors, and explicit edges. This is where the learning happens:
+
+- **`FanOutExecutor`** — buffers messages and broadcasts on `TurnToken`.
+- **`MessageBatcherExecutor`** — per-branch identity node for fan-in barriers.
+- **`ConcurrentAggregatorExecutor`** — count-based barrier that merges results and yields output.
+- **`ParticipantExecutor`** — wraps an `AIAgent` as an executor, handling streaming and event emission.
+- **`RefinementExecutor`** — star-topology hub that implements round-robin group chat orchestration.
+
+Each sub-workflow is still wrapped via `AsAIAgent` and composed sequentially.
+
+### Strategy 4 — Fully Custom Pipeline (`/extract/workflow/fully-custom`)
+
+All three stages live in a **single flat `WorkflowBuilder` graph** — no sub-workflows, no `AsAIAgent`.
+
+```
+                     ┌──→ [Ent_1] ──→ [Batcher] ──┐
+  [Entity Fan-Out] ──┼──→ [Ent_2] ──→ [Batcher] ──┼──→ [Entity Aggregator]
+                     └──→ [Ent_3] ──→ [Batcher] ──┘          │
+                     ┌──→ [Rel_1] ──→ [Batcher] ──┐          │
+  [Rel Fan-Out] ◄───┼──→ [Rel_2] ──→ [Batcher] ──┼──→ [Rel Aggregator]
+                     └──→ [Rel_3] ──→ [Batcher] ──┘          │
+                                                              ▼
+              [RefinementExecutor] ←──→ [Builder / Reviewer] ──→ Output
+```
+
+This requires **forwarding aggregators** (`AggregatorExecutor`) instead of terminal ones — they send `List<ChatMessage>` + `TurnToken` downstream rather than yielding output. The inter-stage handoff is the key difference from Strategy 3.
+
+In the refinement stage, participant executors run with `includeInputInOutput: false`, and `RefinementExecutor` composes clean per-turn conversations from a captured base context (`_baseContext`) plus the latest builder/reviewer response. This avoids context bloat and response parroting across turns.
+
+---
+
+## Custom Executors
+
+| Executor | Role | Two-Phase | Agent-Fueled |
+|---|---|---|---|
+| `FanOutExecutor` | Broadcasts buffered messages to all downstream edges | ✅ | ❌ |
+| `MessageBatcherExecutor` | Stateless relay — gives each branch a distinct identity for the barrier | ❌ | ❌ |
+| `AggregatorExecutor` | Forwarding fan-in — merges N results and sends downstream | ❌ | ❌ |
+| `ConcurrentAggregatorExecutor` | Terminal fan-in — merges N results and yields as output | ❌ | ❌ |
+| `ParticipantExecutor` | Wraps an `AIAgent` — streams responses and forwards results | ✅ | ✅ |
+| `RefinementExecutor` | Star-topology hub — manages turn-taking, termination, output selection | ✅ | Hybrid |
+
+### Two-Phase Message Protocol
+
+Four of six executors buffer data in phase 1 (sync handler) and act in phase 2 (async `TurnToken` handler):
+
+```
+Phase 1: HandleMessages(List<ChatMessage>) → _messages = messages;     // sync, just buffer
+Phase 2: HandleTurnAsync(TurnToken)        → process and send/yield    // async, does the work
+```
+
+The two aggregators are self-triggered (they fire when their count threshold is reached) and don't use `TurnToken`.
+
+### The Swap-and-Clear Pattern
+
+Every stateful executor uses the same pattern to prevent reprocessing:
+
+```csharp
+List<ChatMessage> messages = _messages;   // move reference to local
+_messages = [];                            // clear field immediately
+// ... work with local 'messages' ...
+```
+
+---
+
+## Project Structure
+
+```
+Apex.AgenticEntityExtractor/
+├── Controllers/
+│   └── ExtractorController.cs        # API endpoints (one per strategy)
+├── Agents/
+│   ├── IExtractorAgentsBuilder.cs    # Agent factory interface
+│   └── ExtractorAgentsBuilder.cs     # Creates AIAgents with instructions + tools
+├── Workflows/
+│   ├── IExtractorWorkflowBuilder.cs  # Workflow factory interface
+│   └── ExtractorWorkflowBuilder.cs   # All 4 strategies + sub-workflows
+├── Executors/
+│   ├── FanOutExecutor.cs             # Fan-out entry point
+│   ├── MessageBatcherExecutor.cs     # Per-branch barrier identity
+│   ├── AggregatorExecutor.cs         # Forwarding fan-in (intermediate)
+│   ├── ConcurrentAggregatorExecutor.cs # Terminal fan-in (yields output)
+│   ├── ParticipantExecutor.cs        # AIAgent wrapper for group chats
+│   └── RefinementExecutor.cs         # Star-topology group chat hub
+├── Aggregators/
+│   └── Aggregator.cs                 # Deduplication and merge logic
+├── GroupChatManagers/
+│   ├── ApprovalManager.cs            # Public adapter for RoundRobinGroupChatManager
+│   └── Terminators.cs                # Termination functions (APPROVED / max turns)
+├── Clients/
+│   ├── IExtractorChatClientBuilder.cs
+│   └── ExtractorChatClientBuilder.cs # Multi-provider chat client factory
+├── Enums/
+│   └── ChatProvider.cs               # Ollama, OpenAI, AzureOpenAI, Anthropic
+├── Middleware/
+│   └── ToolResponseMiddleware.cs     # IDistributedCache-based tool response caching
+├── Tools/
+│   └── OntologyTools.cs              # Loads entity/relationship ontologies from JSON
+├── OutputRenderers/
+│   ├── PayloadHelper.cs              # JSON/Mermaid extraction utilities
+│   ├── WorkflowHelper.cs             # Workflow event stream processing
+│   ├── IWorkflowRenderer.cs          # UI abstraction for workflow rendering
+│   ├── SpectreWorkflowRenderer.cs    # Spectre.Console renderer implementation
+│   ├── WorkflowConsoleRenderer.cs    # Console renderer implementation
+│   ├── IDashboardSession.cs          # Dashboard session abstraction
+│   ├── SpectreDashboardSession.cs    # Spectre dashboard session
+│   └── DashboardState.cs             # Dashboard view model/state container
+├── Models/                           # Entity, Relationship, EntityType, etc.
+├── Data/
+│   ├── Input/                        # Default input text + image
+│   ├── Instructions/                 # Agent system prompts (markdown)
+│   └── Ontology/                     # Permitted entity/relationship types (JSON)
+└── Program.cs                        # DI, DevUI registration, Swagger
+```
+
+---
+
+## Configuration
+
+### Provider Selection
+
+Set the active provider in `appsettings.json`:
+
+```json
+{
+  "Provider": "AzureOpenAI",
+  "ToolResponseCacheTTL": "01:00:00"
+}
+```
+
+Supported providers: `Ollama`, `OpenAI`, `NanoOpenAI`, `AzureOpenAI`, `Anthropic`.
+
+### API Keys
+
+Use [User Secrets](https://learn.microsoft.com/aspnet/core/security/app-secrets) for sensitive values:
+
+```bash
+dotnet user-secrets set "AzureOpenAI:Endpoint" "https://your-resource.openai.azure.com/"
+dotnet user-secrets set "AzureOpenAI:ApiKey" "your-key"
+dotnet user-secrets set "AzureOpenAI:DeploymentName" "gpt-4o"
+```
+
+Or for OpenAI:
+
+```bash
+dotnet user-secrets set "OpenAI:ApiKey" "sk-..."
+dotnet user-secrets set "OpenAI:ModelId" "gpt-4o"
+```
+
+---
+
+## Running the Application
+
+```bash
+cd Apex.AgenticEntityExtractor
+dotnet run
+```
+
+The app starts as an ASP.NET Core Web API with:
+- Swagger UI at `https://localhost:<port>/swagger`
+- DevUI at `https://localhost:<port>/devui` (development environment)
+
+It also maps OpenAI-compatible responses and conversation endpoints via:
+- `app.MapOpenAIResponses()`
+- `app.MapOpenAIConversations()`
+
+### API Endpoints
+
+| Endpoint | Strategy | Description |
+|---|---|---|
+| `POST /extract/single-agent` | 0 | Single "god" agent |
+| `POST /extract/workflow/sequential` | 1 | Sequential pipeline |
+| `POST /extract/workflow/as-agents` | 2 | Concurrent sub-workflows (high-level) |
+| `POST /extract/workflow/sub-workflows` | 3 | Custom sub-workflows (hand-wired) |
+| `POST /extract/workflow/fully-custom` | 4 | Single flat graph (all custom) |
+
+All endpoints accept `multipart/form-data` with optional `InputText` (string) and `InputImage` (file). When omitted, defaults from `Data/Input/` are used.
+
+---
+
+## Tech Stack
+
+- **.NET 10** / ASP.NET Core
+- **Microsoft.Agents.AI.OpenAI** `1.0.0-rc3` and **Microsoft.Agents.AI.Anthropic** `1.0.0-rc3`
+- **Microsoft.Agents.AI.Workflows.Generators** `1.0.0-rc3` — workflow source generation for executors
+- **Microsoft.Extensions.AI.AzureAIInference** `10.0.0-preview.1.25559.3`
+- **Azure.AI.OpenAI** `2.8.0-beta.1` / **OllamaSharp** `5.4.23`
+- **Microsoft.Agents.AI.DevUI** `1.0.0-preview.260304.1`
+- **Spectre.Console** + **Spectre.Console.ImageSharp** `0.54.1-alpha.0.68`
+- **Swashbuckle** — Swagger UI
+
+---
+
+## References
+
+- [Microsoft Agents AI Workflows SDK](https://learn.microsoft.com/dotnet/api/microsoft.agents.ai.workflows) — API reference
+- [`MessageHandlerAttribute`](https://learn.microsoft.com/dotnet/api/microsoft.agents.ai.workflows.messagehandlerattribute) — handler signature rules
+- [`AgentWorkflowBuilder`](https://learn.microsoft.com/dotnet/api/microsoft.agents.ai.workflows.agentworkflowbuilder) — high-level workflow helpers
+- [`WorkflowBuilder`](https://learn.microsoft.com/dotnet/api/microsoft.agents.ai.workflows.workflowbuilder) — low-level graph API
+- [`Executor`](https://learn.microsoft.com/dotnet/api/microsoft.agents.ai.workflows.executor) — base executor class
+- [Microsoft.Extensions.AI](https://learn.microsoft.com/dotnet/api/microsoft.extensions.ai) — `IChatClient` and `ChatMessage`
+- [Agents SDK GitHub repository](https://github.com/microsoft/Agents-SDK) — source code and samples
+
+---
+
+## License
+
+See [LICENSE](LICENSE) for details.

@@ -1,4 +1,4 @@
-﻿using Apex.AgenticEntityExtractor.Helpers;
+﻿using Apex.AgenticEntityExtractor.OutputRenderers;
 using Apex.AgenticEntityExtractor.Models;
 using System.ComponentModel;
 using System.Text.Json;
@@ -19,7 +19,7 @@ internal class OntologyTools
     string filePath = Path.Combine("Data", "Ontology", "entities-ontology.json");
     string jsonContent = await File.ReadAllTextAsync(filePath);
     var entityTypes = JsonSerializer.Deserialize<List<EntityType>>(jsonContent);
-    WorkflowHelper.RecordExternalToolEvent($"[ONTOLOGY: Load Entities] {entityTypes?.Count ?? 0} entities");
+    WorkflowHelper.EnqueueExternalToolEvent($"[ONTOLOGY: Load Entities] {entityTypes?.Count ?? 0} entities");
 
     return entityTypes ?? [];
   }
@@ -33,7 +33,7 @@ internal class OntologyTools
     string filePath = Path.Combine("Data", "Ontology", "relationships-ontology.json");
     string jsonContent = await File.ReadAllTextAsync(filePath);
     var relationshipTypes = JsonSerializer.Deserialize<List<RelationshipType>>(jsonContent);
-    WorkflowHelper.RecordExternalToolEvent($"[ONTOLOGY: Load Relationships] {relationshipTypes?.Count ?? 0} relationships");
+    WorkflowHelper.EnqueueExternalToolEvent($"[ONTOLOGY: Load Relationships] {relationshipTypes?.Count ?? 0} relationships");
 
     return relationshipTypes ?? [];
   }

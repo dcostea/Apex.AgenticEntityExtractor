@@ -1,4 +1,5 @@
 ﻿using Apex.AgenticEntityExtractor.Executors;
+using Apex.AgenticEntityExtractor.OutputRenderers;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
@@ -44,13 +45,69 @@ public class ApprovalManager(IReadOnlyList<AIAgent> agents, Func<RoundRobinGroup
     return base.SelectNextAgentAsync(history, cancellationToken);
   }
 
+  private const string Approved = "APPROVED";
+  private const string Errors = "ERRORS";
+
   /// <summary>
-  /// Exposes history update/filtering publicly for custom host/orchestrator usage.
+  /// Creates a termination function that ends the group chat when:
+  /// <list type="bullet">
+  ///   <item>The last message contains <c>"APPROVED"</c> (without <c>"ERRORS"</c>) — the reviewer
+  ///         accepted the diagram.</item>
+  ///   <item>The iteration count reaches the maximum — forces termination as a safety net.</item>
+  /// </list>
+  ///
+  /// This function works with both orchestration paths:
+  /// <list type="bullet">
+  ///   <item><b>Custom orchestration:</b> reads <see cref="CurrentIterationCount"/>
+  ///         (incremented by our <see cref="RefinementExecutor"/>).</item>
+  ///   <item><b>High-level workflow:</b> reads the base <c>IterationCount</c> property
+  ///         (incremented by the framework's internal host).</item>
+  /// </list>
+  /// Status messages are recorded via <see cref="WorkflowHelper.EnqueueReviewStatusEvent(string)"/>
+  /// so they appear in the dashboard review-status panel.
   /// </summary>
-  public new ValueTask<IEnumerable<ChatMessage>> UpdateHistoryAsync(
-    IReadOnlyList<ChatMessage> history,
-    CancellationToken cancellationToken = default)
+  public static Func<RoundRobinGroupChatManager, IEnumerable<ChatMessage>, CancellationToken, ValueTask<bool>> ApprovedTermination()
   {
-    return base.UpdateHistoryAsync(history, cancellationToken);
+    return (chatManager, messages, _) =>
+    {
+      string lastText = messages.LastOrDefault()?.Text ?? string.Empty;
+      int currentIterationCount = GetCurrentIterationCount(chatManager);
+      int maxIteration = chatManager.MaximumIterationCount;
+
+      if (currentIterationCount >= maxIteration)
+      {
+        WorkflowHelper.EnqueueReviewStatusEvent($"⚠ Max round-robin turns reached - Stopping review loop without approval (turn {currentIterationCount}/{maxIteration})");
+        return ValueTask.FromResult(true);
+      }
+
+      bool isApproved = IsApproved(lastText);
+
+      if (isApproved)
+      {
+        WorkflowHelper.EnqueueReviewStatusEvent($"✅ Diagram APPROVED - Exiting review loop (turn {currentIterationCount}/{maxIteration})");
+        return ValueTask.FromResult(true);
+      }
+
+      if (lastText.Contains(Errors, StringComparison.OrdinalIgnoreCase))
+      {
+        WorkflowHelper.EnqueueReviewStatusEvent($"✓ Reviewer requested changes - Retrying (turn {currentIterationCount}/{maxIteration})");
+      }
+
+      return ValueTask.FromResult(false);
+    };
+  }
+
+  private static int GetCurrentIterationCount(RoundRobinGroupChatManager chatManager)
+  {
+    if (chatManager is ApprovalManager approvalManager)
+      return approvalManager.CurrentIterationCount;
+
+    return chatManager.IterationCount;
+  }
+
+  private static bool IsApproved(string text)
+  {
+    return text.Contains(Approved, StringComparison.OrdinalIgnoreCase)
+      && !text.Contains(Errors, StringComparison.OrdinalIgnoreCase);
   }
 }

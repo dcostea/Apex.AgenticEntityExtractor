@@ -14,21 +14,16 @@ namespace Apex.AgenticEntityExtractor.Agents;
 /// the default provider read from configuration (<c>appsettings.json → Provider</c>).
 /// Chat clients are lazily created and cached inside <see cref="IExtractorChatClientBuilder"/>.
 /// </summary>
-public class ExtractorAgentsBuilder(
-  IExtractorChatClientBuilder chatClientBuilder,
-  IConfiguration configuration,
-  IToolResponseMiddleware toolResponseMiddleware) : IExtractorAgentsBuilder
+public class ExtractorAgentsBuilder(IExtractorChatClientBuilder chatClientBuilder, IConfiguration configuration, IToolResponseMiddleware toolResponseMiddleware)
+  : IExtractorAgentsBuilder
 {
-  private readonly ChatProvider _defaultProvider =
-    Enum.Parse<ChatProvider>(configuration["Provider"] ?? "AzureOpenAI");
+  private readonly ChatProvider _defaultProvider = Enum.Parse<ChatProvider>(configuration["Provider"] ?? "AzureOpenAI");
 
   private static readonly ConcurrentDictionary<string, string> _instructionsCache = new();
 
-  private IChatClient GetChatClient(ChatProvider? provider) =>
-    chatClientBuilder.GetChatClient(provider ?? _defaultProvider);
+  private IChatClient GetChatClient(ChatProvider? provider) => chatClientBuilder.GetChatClient(provider ?? _defaultProvider);
 
-  private static string LoadInstructions(string fileName) =>
-    _instructionsCache.GetOrAdd(fileName, f => File.ReadAllText(Path.Combine("Data", "Instructions", f)));
+  private static string LoadInstructions(string fileName) => _instructionsCache.GetOrAdd(fileName, f => File.ReadAllText(Path.Combine("Data", "Instructions", f)));
 
   /// <summary>
   /// Builds the single-pass extractor agent that runs the full extraction prompt in one call.
@@ -41,7 +36,6 @@ public class ExtractorAgentsBuilder(
       ChatOptions = new ChatOptions
       {
         Instructions = LoadInstructions("ExtractorSoloAgent.md"),
-
         MaxOutputTokens = 1000,
         //Temperature = 0.1F,
       }
@@ -61,7 +55,6 @@ public class ExtractorAgentsBuilder(
       ChatOptions = new ChatOptions
       {
         Instructions = LoadInstructions("EntitiesAgent.md"),
-
         MaxOutputTokens = 3000,
         //Temperature = 0.1F,
         Tools = [AIFunctionFactory.Create(OntologyTools.LoadEntitiesOntologyAsync, "load_entities_ontology")],
@@ -90,7 +83,6 @@ public class ExtractorAgentsBuilder(
       ChatOptions = new ChatOptions
       {
         Instructions = LoadInstructions("RelationshipsAgent.md"),
-
         MaxOutputTokens = 3000,
         //Temperature = 0.1F,
         Tools = [AIFunctionFactory.Create(OntologyTools.LoadRelationshipsOntologyAsync, "load_relationships_ontology")],
@@ -119,7 +111,6 @@ public class ExtractorAgentsBuilder(
       ChatOptions = new ChatOptions
       {
         Instructions = LoadInstructions("MermaidDiagramAgent.md"),
-
         MaxOutputTokens = 3000,
         //Temperature = 0.1F,
         Reasoning = new ReasoningOptions
@@ -144,7 +135,6 @@ public class ExtractorAgentsBuilder(
       ChatOptions = new ChatOptions
       {
         Instructions = LoadInstructions("MermaidReviewerAgent.md"),
-
         MaxOutputTokens = 3000,
         //Temperature = 0.1F,
         Tools =

@@ -12,6 +12,7 @@ public enum ChatProvider
 {
   Ollama,
   OpenAI,
+  Nano_OpenAI,
   AzureOpenAI,
   Anthropic
 }

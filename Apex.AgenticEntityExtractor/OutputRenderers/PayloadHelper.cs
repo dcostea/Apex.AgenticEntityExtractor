@@ -1,7 +1,7 @@
 using Microsoft.Extensions.AI;
 using System.Text.Json;
 
-namespace Apex.AgenticEntityExtractor.Helpers;
+namespace Apex.AgenticEntityExtractor.OutputRenderers;
 
 /// <summary>
 /// Helper functions for parsing and locating structured payloads exchanged in chat messages.
@@ -39,7 +39,7 @@ internal static class PayloadHelper
   /// <summary>
   /// Removes markdown code-fence wrappers from a JSON payload string.
   /// </summary>
-  public static string NormalizeJsonPayload(string text)
+  private static string NormalizeJsonPayload(string text)
   {
     var span = text.AsSpan().Trim();
 

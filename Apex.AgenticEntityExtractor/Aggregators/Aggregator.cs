@@ -1,4 +1,4 @@
-﻿using Apex.AgenticEntityExtractor.Helpers;
+﻿using Apex.AgenticEntityExtractor.OutputRenderers;
 using Apex.AgenticEntityExtractor.Models;
 using Microsoft.Extensions.AI;
 using System.Text.Json;
@@ -17,10 +17,7 @@ public class Aggregator
   /// </summary>
   public static List<ChatMessage> AggregateEntities(IList<List<ChatMessage>> aggregateResults)
   {
-    var uniqueEntities = CollectAndDeduplicate<Entities, Entity>(
-      aggregateResults,
-      payloadKind: "entities",
-      container => container.Items,
+    var uniqueEntities = CollectAndDeduplicate<Entities, Entity>(aggregateResults, payloadKind: "entities", container => container.Items,
       e => new { e.EntityType, e.EntityValue });
 
     // Re-assign sequential IDs — different agents assign conflicting IDs to the same entity.
@@ -40,10 +37,7 @@ public class Aggregator
   /// </summary>
   public static List<ChatMessage> AggregateRelationships(IList<List<ChatMessage>> aggregateResults)
   {
-    var uniqueRelationships = CollectAndDeduplicate<Relationships, Relationship>(
-      aggregateResults,
-      payloadKind: "relationships",
-      container => container.Items,
+    var uniqueRelationships = CollectAndDeduplicate<Relationships, Relationship>(aggregateResults, payloadKind: "relationships", container => container.Items,
       r => new { r.Source, r.RelationshipType, r.Target });
 
     // Re-assign sequential IDs — different agents assign conflicting IDs to the same relationship.

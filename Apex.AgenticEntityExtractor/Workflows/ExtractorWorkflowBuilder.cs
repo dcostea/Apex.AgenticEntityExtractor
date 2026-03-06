@@ -138,75 +138,76 @@ public class ExtractorWorkflowBuilder(IExtractorAgentsBuilder agentsBuilder) : I
   /// </summary>
   public Workflow BuildFullyCustomOrchestratedPipeline(string workflowName)
   {
-    // ── Create all agents ──────────────────────────────────────────────
-    AIAgent entityAgent1 = agentsBuilder.BuildEntitiesAgent("1", ChatProvider.OpenAI);
-    AIAgent entityAgent2 = agentsBuilder.BuildEntitiesAgent("2", ChatProvider.OpenAI);
-    AIAgent entityAgent3 = agentsBuilder.BuildEntitiesAgent("3", ChatProvider.OpenAI);
+    // ── Create entity agents ──────────────────────────────────────────────
+    AIAgent entityAgent1 = agentsBuilder.BuildEntitiesAgent("1", ChatProvider.Nano_OpenAI);
+    AIAgent entityAgent2 = agentsBuilder.BuildEntitiesAgent("2", ChatProvider.Nano_OpenAI);
+    AIAgent entityAgent3 = agentsBuilder.BuildEntitiesAgent("3", ChatProvider.Nano_OpenAI);
 
-    AIAgent relationshipAgent1 = agentsBuilder.BuildRelationshipsAgent("1", ChatProvider.OpenAI);
-    AIAgent relationshipAgent2 = agentsBuilder.BuildRelationshipsAgent("2", ChatProvider.OpenAI);
-    AIAgent relationshipAgent3 = agentsBuilder.BuildRelationshipsAgent("3", ChatProvider.OpenAI);
+    // ── Create relationship agents ───────────────────────────────────────
+    AIAgent relationshipAgent1 = agentsBuilder.BuildRelationshipsAgent("1", ChatProvider.Nano_OpenAI);
+    AIAgent relationshipAgent2 = agentsBuilder.BuildRelationshipsAgent("2", ChatProvider.Nano_OpenAI);
+    AIAgent relationshipAgent3 = agentsBuilder.BuildRelationshipsAgent("3", ChatProvider.Nano_OpenAI);
 
-    AIAgent diagramBuilderAgent = agentsBuilder.BuildMermaidDiagramAgent(ChatProvider.OpenAI);
-    AIAgent diagramReviewerAgent = agentsBuilder.BuildMermaidReviewerAgent(ChatProvider.OpenAI);
+    // ── Create diagram builder/reviewer agents ─────────────────────────
+    AIAgent diagramBuilderAgent = agentsBuilder.BuildMermaidDiagramAgent(ChatProvider.Nano_OpenAI);
+    AIAgent diagramReviewerAgent = agentsBuilder.BuildMermaidReviewerAgent(ChatProvider.Nano_OpenAI);
 
     // ── Stage 1: Entity extraction (fan-out / fan-in) ─────────────────
-    var entityFanOut = new FanOutExecutor("EntityFanOut");
-    var entityAggregator = new AggregatorExecutor("EntityAggregator", 3, Aggregator.AggregateEntities);
+    FanOutExecutor entityFanOut = new("EntityFanOut");
+    AggregatorExecutor entityAggregator = new("EntityAggregator", 3, Aggregator.AggregateEntities);
 
     // ── Stage 2: Relationship extraction (fan-out / fan-in) ───────────
-    var relationshipFanOut = new FanOutExecutor("RelationshipFanOut");
-    var relationshipAggregator = new AggregatorExecutor("RelationshipAggregator", 3, Aggregator.AggregateRelationships);
+    FanOutExecutor relationshipFanOut = new("RelationshipFanOut");
+    AggregatorExecutor relationshipAggregator = new("RelationshipAggregator", 3, Aggregator.AggregateRelationships);
 
     // ── Stage 3: Mermaid diagram refinement (star-topology group chat) ──────
-    var builderParticipant = new ParticipantExecutor(diagramBuilderAgent, includeInputInOutput: true);
-    var reviewerParticipant = new ParticipantExecutor(diagramReviewerAgent, includeInputInOutput: true);
+    ParticipantExecutor builderParticipant = new(diagramBuilderAgent, includeInputInOutput: false);
+    ParticipantExecutor reviewerParticipant = new(diagramReviewerAgent, includeInputInOutput: false);
 
     // Round-robin manager: alternates between builder and reviewer, terminates on APPROVED or max turns
-    ApprovalManager roundRobinManager = new([diagramBuilderAgent, diagramReviewerAgent], terminationFunction: Terminators.TerminationFunction())
+    ApprovalManager approvalManager = new([diagramBuilderAgent, diagramReviewerAgent], terminationFunction: ApprovalManager.ApprovedTermination())
     {
       MaximumIterationCount = 10 // Allow up to 10 turns (5 per participant) before forced termination
     };
-
-    var refinementExecutor = new RefinementExecutor(nameof(RefinementExecutor), diagramBuilderAgent, builderParticipant, reviewerParticipant, roundRobinManager);
+    RefinementExecutor mermaidRefiner = new("MermaidRefiner", diagramBuilderAgent, builderParticipant, reviewerParticipant, approvalManager);
 
     // ── Wire the single flat graph (all stages share one WorkflowBuilder) ───
     WorkflowBuilder workflowBuilder = new(entityFanOut);
 
     // Stage 1 edges: fan-out → entity agents → batchers → fan-in barrier → forwarding aggregator
-    workflowBuilder.AddFanOutEdge(entityFanOut, [entityAgent1, entityAgent2, entityAgent3]);
-    var entityBatcher1 = new MessageBatcherExecutor($"Batch/{entityAgent1.Name}");
-    var entityBatcher2 = new MessageBatcherExecutor($"Batch/{entityAgent2.Name}");
-    var entityBatcher3 = new MessageBatcherExecutor($"Batch/{entityAgent3.Name}");
-    workflowBuilder.AddEdge((ExecutorBinding)entityAgent1, entityBatcher1);
+    workflowBuilder.AddFanOutEdge(entityFanOut, [entityAgent1, entityAgent2, entityAgent3], "EntFanOutEdge");
+    BatcherExecutor entityBatcher1 = new($"Batch/{entityAgent1.Name}");
+    BatcherExecutor entityBatcher2 = new($"Batch/{entityAgent2.Name}");
+    BatcherExecutor entityBatcher3 = new($"Batch/{entityAgent3.Name}");
+    workflowBuilder.AddEdge(entityAgent1, entityBatcher1);
     workflowBuilder.AddEdge(entityAgent2, entityBatcher2);
     workflowBuilder.AddEdge(entityAgent3, entityBatcher3);
-    workflowBuilder.AddFanInBarrierEdge([entityBatcher1, entityBatcher2, entityBatcher3], entityAggregator);
+    workflowBuilder.AddFanInBarrierEdge([entityBatcher1, entityBatcher2, entityBatcher3], entityAggregator, "EntFanInBarrierEdge");
 
     // Inter-stage handoff: entity aggregator forwards merged entities to relationship fan-out
-    workflowBuilder.AddEdge(entityAggregator, relationshipFanOut);
+    workflowBuilder.AddEdge(entityAggregator, relationshipFanOut, "EntHandoffEdge");
 
     // Stage 2 edges: fan-out → relationship agents → batchers → fan-in barrier → forwarding aggregator
-    workflowBuilder.AddFanOutEdge(relationshipFanOut, [relationshipAgent1, relationshipAgent2, relationshipAgent3]);
-    var relationshipBatcher1 = new MessageBatcherExecutor($"Batch/{relationshipAgent1.Name}");
-    var relationshipBatcher2 = new MessageBatcherExecutor($"Batch/{relationshipAgent2.Name}");
-    var relationshipBatcher3 = new MessageBatcherExecutor($"Batch/{relationshipAgent3.Name}");
+    workflowBuilder.AddFanOutEdge(relationshipFanOut, [relationshipAgent1, relationshipAgent2, relationshipAgent3], "RelFanOutEdge");
+    BatcherExecutor relationshipBatcher1 = new($"Batch/{relationshipAgent1.Name}");
+    BatcherExecutor relationshipBatcher2 = new($"Batch/{relationshipAgent2.Name}");
+    BatcherExecutor relationshipBatcher3 = new($"Batch/{relationshipAgent3.Name}");
     workflowBuilder.AddEdge(relationshipAgent1, relationshipBatcher1);
     workflowBuilder.AddEdge(relationshipAgent2, relationshipBatcher2);
     workflowBuilder.AddEdge(relationshipAgent3, relationshipBatcher3);
-    workflowBuilder.AddFanInBarrierEdge([relationshipBatcher1, relationshipBatcher2, relationshipBatcher3], relationshipAggregator);
+    workflowBuilder.AddFanInBarrierEdge([relationshipBatcher1, relationshipBatcher2, relationshipBatcher3], relationshipAggregator, "RelFanInBarrierEdge");
 
     // Inter-stage handoff: relationship aggregator forwards merged data to group chat orchestrator
-    workflowBuilder.AddEdge(relationshipAggregator, refinementExecutor);
+    workflowBuilder.AddEdge(relationshipAggregator, mermaidRefiner, "RelHandoffEdge");
 
     // Stage 3 edges: star topology — bidirectional edges between orchestrator and each participant
-    workflowBuilder.AddEdge(refinementExecutor, builderParticipant);
-    workflowBuilder.AddEdge(builderParticipant, refinementExecutor);
-    workflowBuilder.AddEdge(refinementExecutor, reviewerParticipant);
-    workflowBuilder.AddEdge(reviewerParticipant, refinementExecutor);
+    workflowBuilder.AddEdge(mermaidRefiner, builderParticipant, "Refine2Build");
+    workflowBuilder.AddEdge(builderParticipant, mermaidRefiner, "Build2Refine");
+    workflowBuilder.AddEdge(mermaidRefiner, reviewerParticipant, "Refine2Review");
+    workflowBuilder.AddEdge(reviewerParticipant, mermaidRefiner, "Review2Refine");
 
     // Output: the refinement orchestrator yields the final Mermaid diagram
-    workflowBuilder.WithOutputFrom(refinementExecutor);
+    workflowBuilder.WithOutputFrom(mermaidRefiner);
     workflowBuilder.WithName(workflowName);
 
     return workflowBuilder.Build();
@@ -226,7 +227,7 @@ public class ExtractorWorkflowBuilder(IExtractorAgentsBuilder agentsBuilder) : I
   /// Simulates the <b>concurrent pattern</b> for entity extraction using manual fan-out/fan-in wiring.
   /// <code>
   ///                      ┌──→ [EntAgent_1] ──→ [Batcher 1] ──┐
-  ///   [FanOutExecutor] ──┼──→ [EntAgent_2] ──→ [Batcher 2] ──┼──→ [ConcurrentAggregatorExecutor] ──→ Output
+  ///   [FanOutExecutor] ──┼──→ [EntAgent_2] ──→ [Batcher 2] ──┼──→ [AggregatorExecutor] ──→ Output
   ///                      └──→ [EntAgent_3] ──→ [Batcher 3] ──┘
   /// </code>
   /// <b>Flow:</b>
@@ -234,14 +235,14 @@ public class ExtractorWorkflowBuilder(IExtractorAgentsBuilder agentsBuilder) : I
   ///   <item>FanOutExecutor receives input messages and broadcasts them to all three agents simultaneously.</item>
   ///   <item>Each agent processes independently and sends results to its dedicated Batcher.</item>
   ///   <item>The fan-in barrier waits for all three batchers to complete before proceeding.</item>
-  ///   <item>ConcurrentAggregatorExecutor deduplicates and merges the three result sets into a single output.</item>
+  ///   <item>AggregatorExecutor deduplicates and merges the three result sets into a single output.</item>
   /// </list>
   /// </summary>
   public Workflow BuildEntityExtractionAsConcurrent(string workflowName)
   {
     // 1. Create the boundary executors: fan-out (entry) and fan-in (exit)
-    var fanOutExecutor = new FanOutExecutor(nameof(FanOutExecutor));
-    var fanInAggregator = new ConcurrentAggregatorExecutor(nameof(ConcurrentAggregatorExecutor), 3, Aggregator.AggregateEntities);
+    var fanOutExecutor = new FanOutExecutor("EntityFanOut");
+    var fanInAggregator = new AggregatorExecutor("EntityAggregator", 3, Aggregator.AggregateEntities);
 
     // 2. Create three identical agents that will process the same input in parallel
     AIAgent entityAgent1 = agentsBuilder.BuildEntitiesAgent("1");
@@ -252,18 +253,18 @@ public class ExtractorWorkflowBuilder(IExtractorAgentsBuilder agentsBuilder) : I
     WorkflowBuilder workflowBuilder = new(fanOutExecutor);
 
     // 4. Fan-out edge: broadcasts input from one source to multiple targets
-    workflowBuilder.AddFanOutEdge(fanOutExecutor, [entityAgent1, entityAgent2, entityAgent3]);
+    workflowBuilder.AddFanOutEdge(fanOutExecutor, [entityAgent1, entityAgent2, entityAgent3], "EntFanOutEdge");
 
     // 5. Each agent's output flows to a dedicated batcher that collects messages per turn
-    var batcher1 = new MessageBatcherExecutor($"Batch/{entityAgent1.Name}");
-    var batcher2 = new MessageBatcherExecutor($"Batch/{entityAgent2.Name}");
-    var batcher3 = new MessageBatcherExecutor($"Batch/{entityAgent3.Name}");
+    var batcher1 = new BatcherExecutor($"Batch/{entityAgent1.Name}");
+    var batcher2 = new BatcherExecutor($"Batch/{entityAgent2.Name}");
+    var batcher3 = new BatcherExecutor($"Batch/{entityAgent3.Name}");
     workflowBuilder.AddEdge(entityAgent1, batcher1);
     workflowBuilder.AddEdge(entityAgent2, batcher2);
     workflowBuilder.AddEdge(entityAgent3, batcher3);
 
     // 6. Fan-in barrier: waits for ALL batchers to complete, then sends each result to the aggregator
-    workflowBuilder.AddFanInBarrierEdge([batcher1, batcher2, batcher3], fanInAggregator);
+    workflowBuilder.AddFanInBarrierEdge([batcher1, batcher2, batcher3], fanInAggregator, "EntFanInBarrierEdge");
 
     // 7. Mark the aggregator as the workflow's output node
     workflowBuilder.WithOutputFrom(fanInAggregator);
@@ -278,14 +279,14 @@ public class ExtractorWorkflowBuilder(IExtractorAgentsBuilder agentsBuilder) : I
   /// and a relationship-specific aggregation function.
   /// <code>
   ///                      ┌──→ [RelAgent_1] ──→ [Batcher 1] ──┐
-  ///   [FanOutExecutor] ──┼──→ [RelAgent_2] ──→ [Batcher 2] ──┼──→ [ConcurrentAggregatorExecutor] ──→ Output
+  ///   [FanOutExecutor] ──┼──→ [RelAgent_2] ──→ [Batcher 2] ──┼──→ [AggregatorExecutor] ──→ Output
   ///                      └──→ [RelAgent_3] ──→ [Batcher 3] ──┘
   /// </code>
   /// </summary>
   public Workflow BuildRelationshipExtractionAsConcurrent(string workflowName)
   {
-    var fanOutExecutor = new FanOutExecutor(nameof(FanOutExecutor));
-    var fanInAggregator = new ConcurrentAggregatorExecutor(nameof(ConcurrentAggregatorExecutor), 3, Aggregator.AggregateRelationships);
+    var fanOutExecutor = new FanOutExecutor("RelationshipFanOut");
+    var fanInAggregator = new AggregatorExecutor("RelationshipAggregator", 3, Aggregator.AggregateRelationships);
 
     AIAgent relationshipAgent1 = agentsBuilder.BuildRelationshipsAgent("1");
     AIAgent relationshipAgent2 = agentsBuilder.BuildRelationshipsAgent("2");
@@ -293,14 +294,14 @@ public class ExtractorWorkflowBuilder(IExtractorAgentsBuilder agentsBuilder) : I
 
     WorkflowBuilder workflowBuilder = new(fanOutExecutor);
 
-    workflowBuilder.AddFanOutEdge(fanOutExecutor, [relationshipAgent1, relationshipAgent2, relationshipAgent3]);
-    var batcher1 = new MessageBatcherExecutor($"Batch/{relationshipAgent1.Name}");
-    var batcher2 = new MessageBatcherExecutor($"Batch/{relationshipAgent2.Name}");
-    var batcher3 = new MessageBatcherExecutor($"Batch/{relationshipAgent3.Name}");
+    workflowBuilder.AddFanOutEdge(fanOutExecutor, [relationshipAgent1, relationshipAgent2, relationshipAgent3], "RelFanOutEdge");
+    var batcher1 = new BatcherExecutor($"Batch/{relationshipAgent1.Name}");
+    var batcher2 = new BatcherExecutor($"Batch/{relationshipAgent2.Name}");
+    var batcher3 = new BatcherExecutor($"Batch/{relationshipAgent3.Name}");
     workflowBuilder.AddEdge(relationshipAgent1, batcher1);
     workflowBuilder.AddEdge(relationshipAgent2, batcher2);
     workflowBuilder.AddEdge(relationshipAgent3, batcher3);
-    workflowBuilder.AddFanInBarrierEdge([batcher1, batcher2, batcher3], fanInAggregator);
+    workflowBuilder.AddFanInBarrierEdge([batcher1, batcher2, batcher3], fanInAggregator, "RelFanInBarrierEdge");
     workflowBuilder.WithOutputFrom(fanInAggregator);
     workflowBuilder.WithName(workflowName);
 
@@ -343,11 +344,11 @@ public class ExtractorWorkflowBuilder(IExtractorAgentsBuilder agentsBuilder) : I
 
     // 1. Create explicit participant executors — bridges the AIAgent interface
     //    to the workflow executor protocol, handling role reassignment and message forwarding
-    var builderParticipant = new ParticipantExecutor(diagramBuilderAgent, includeInputInOutput: true);
-    var reviewerParticipant = new ParticipantExecutor(diagramReviewerAgent, includeInputInOutput: true);
+    var builderParticipant = new ParticipantExecutor(diagramBuilderAgent, includeInputInOutput: false);
+    var reviewerParticipant = new ParticipantExecutor(diagramReviewerAgent, includeInputInOutput: false);
 
     // 2. Create the group chat manager that controls speaker selection and termination
-    ApprovalManager roundRobinManager = new([diagramBuilderAgent, diagramReviewerAgent], terminationFunction: Terminators.TerminationFunction())
+    ApprovalManager approvalManager = new([diagramBuilderAgent, diagramReviewerAgent], terminationFunction: ApprovalManager.ApprovedTermination())
     {
       MaximumIterationCount = 10 // Allow up to 10 turns (5 per participant) before forced termination
     };
@@ -355,15 +356,15 @@ public class ExtractorWorkflowBuilder(IExtractorAgentsBuilder agentsBuilder) : I
     // 3. Create the central Refinement Orchestrator — the hub of the star topology.
     //    Direct instantiation ensures the [YieldsOutput] attribute is visible to
     //    the WorkflowBuilder when registering output types.
-    var refinementExecutor = new RefinementExecutor(nameof(RefinementExecutor), diagramBuilderAgent, builderParticipant, reviewerParticipant, roundRobinManager);
+    RefinementExecutor refinementExecutor = new("MermaidRefiner", diagramBuilderAgent, builderParticipant, reviewerParticipant, approvalManager);
 
     // 4. Build the star topology: Chat Host ↔ each participant (bidirectional edges)
     WorkflowBuilder workflowBuilder = new(refinementExecutor);
 
-    workflowBuilder.AddEdge(refinementExecutor, builderParticipant);
-    workflowBuilder.AddEdge(builderParticipant, refinementExecutor);
-    workflowBuilder.AddEdge(refinementExecutor, reviewerParticipant);
-    workflowBuilder.AddEdge(reviewerParticipant, refinementExecutor);
+    workflowBuilder.AddEdge(refinementExecutor, builderParticipant, "Refine2Build");
+    workflowBuilder.AddEdge(builderParticipant, refinementExecutor, "Build2Refine");
+    workflowBuilder.AddEdge(refinementExecutor, reviewerParticipant, "Refine2Review");
+    workflowBuilder.AddEdge(reviewerParticipant, refinementExecutor, "Review2Refine");
 
     // 5. The RefinementExecutor is both the entry point and the output node
     workflowBuilder.WithOutputFrom(refinementExecutor);
@@ -425,7 +426,7 @@ public class ExtractorWorkflowBuilder(IExtractorAgentsBuilder agentsBuilder) : I
     AIAgent diagramReviewerAgent = agentsBuilder.BuildMermaidReviewerAgent();
 
     Workflow workflow = AgentWorkflowBuilder
-      .CreateGroupChatBuilderWith(agents => new RoundRobinGroupChatManager(agents, Terminators.TerminationFunction())
+      .CreateGroupChatBuilderWith(agents => new RoundRobinGroupChatManager(agents, ApprovalManager.ApprovedTermination())
       {
         MaximumIterationCount = 10 // Allow up to 10 turns (5 per participant) before forced termination
       })

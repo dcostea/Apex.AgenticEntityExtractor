@@ -36,14 +36,14 @@ public partial class FanOutExecutor(string executorId)
 {
   private List<ChatMessage> _messages = [];
 
-  /// <summary>Accepts a single <see cref="ChatMessage"/> and replaces the buffer.</summary>
+  /// <summary>Accepts a single <see cref="ChatMessage"/> and replaces the buffer (when this executor is entry point, we get a solo message).</summary>
   [MessageHandler]
   private void HandleMessage(ChatMessage message, IWorkflowContext context)
   {
     _messages = [message];
   }
 
-  /// <summary>Accepts a full message list and replaces the buffer.</summary>
+  /// <summary>Accepts a full message list and replaces the buffer (when this executor is entry point, we get a list of messages).</summary>
   [MessageHandler]
   private void HandleMessages(List<ChatMessage> messages, IWorkflowContext context)
   {
@@ -58,7 +58,7 @@ public partial class FanOutExecutor(string executorId)
     if (_messages.Count == 0)
       return;
 
-    // Swap-and-clear to avoid rebroadcasting on subsequent TurnTokens
+    // Capture the current buffer and clear it to prepare for the next turn
     List<ChatMessage> messages = _messages;
     _messages = [];
 

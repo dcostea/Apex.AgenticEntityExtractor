@@ -1,6 +1,7 @@
 ﻿using Apex.AgenticEntityExtractor.Agents;
 using Apex.AgenticEntityExtractor.Helpers;
 using Apex.AgenticEntityExtractor.Models;
+using Apex.AgenticEntityExtractor.OutputRenderers;
 using Apex.AgenticEntityExtractor.Workflows;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
@@ -14,7 +15,7 @@ namespace Apex.AgenticEntityExtractor.Controllers;
 /// </summary>
 [ApiController]
 [Route("[controller]")]
-public class ExtractorController(IExtractorWorkflowBuilder extractorWorkflowBuilder, IExtractorAgentsBuilder extractorAgentsBuilder) : ControllerBase
+public class ExtractorController(IExtractorWorkflowBuilder extractorWorkflowBuilder, IExtractorAgentsBuilder extractorAgentsBuilder, WorkflowHelper workflowHelper, IWorkflowRenderer workflowRenderer) : ControllerBase
 {
   /// <summary>
   /// Runs the single-agent extraction path.
@@ -25,13 +26,13 @@ public class ExtractorController(IExtractorWorkflowBuilder extractorWorkflowBuil
   {
     try
     {
-      ChatMessage userMessage = await BuildUserMessageAsync(request);
+      ChatMessage userMessage = await MessageHelper.BuildUserMessageAsync(request);
 
       // Build the single extractor agent.
       AIAgent extractorAgent = extractorAgentsBuilder.BuildExtractorAgent();
 
       // Run and render streamed output.
-      await WorkflowHelper.RenderAgentResponseStreamAsync(extractorAgent, userMessage, "SINGLE AGENT EXTRACTION");
+      await workflowHelper.RenderAgentResponseStreamAsync(extractorAgent, userMessage, "SINGLE AGENT EXTRACTION");
 
       return Ok();
     }
@@ -50,7 +51,7 @@ public class ExtractorController(IExtractorWorkflowBuilder extractorWorkflowBuil
   {
     try
     {
-      ChatMessage userMessage = await BuildUserMessageAsync(request);
+      ChatMessage userMessage = await MessageHelper.BuildUserMessageAsync(request);
 
       // Build workflow.
       Workflow workflow = extractorWorkflowBuilder.BuildSequentialPipeline("SequentialPipeline");
@@ -58,7 +59,7 @@ public class ExtractorController(IExtractorWorkflowBuilder extractorWorkflowBuil
 
       // Trigger execution and render workflow events/output.
       await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
-      var result = await WorkflowHelper.RenderWorkflowExecutionEventsAsync(run, "WORKFLOW WITH SIMPLE SEQUENTIAL AGENTS");
+      var result = await workflowHelper.RenderWorkflowExecutionEventsAsync(run, "WORKFLOW WITH SIMPLE SEQUENTIAL AGENTS");
 
       return Ok(result);
     }
@@ -67,7 +68,6 @@ public class ExtractorController(IExtractorWorkflowBuilder extractorWorkflowBuil
       return BadRequest(ex.Message);
     }
   }
-
 
   /// <summary>
   /// Runs the workflow-composition path where sub-workflows are wrapped as agents.
@@ -78,7 +78,7 @@ public class ExtractorController(IExtractorWorkflowBuilder extractorWorkflowBuil
   {
     try
     {
-      ChatMessage userMessage = await BuildUserMessageAsync(request);
+      ChatMessage userMessage = await MessageHelper.BuildUserMessageAsync(request);
 
       // Build workflow.
       Workflow workflow = extractorWorkflowBuilder.BuildPipelineFromConcurrentWorkflows("PipelineFromConcurrentWorkflows");
@@ -86,7 +86,7 @@ public class ExtractorController(IExtractorWorkflowBuilder extractorWorkflowBuil
 
       // Trigger execution and render workflow events/output.
       await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
-      var result = await WorkflowHelper.RenderWorkflowExecutionEventsAsync(run, "WORKFLOW WITH WORKFLOWS AS AGENTS");
+      var result = await workflowHelper.RenderWorkflowExecutionEventsAsync(run, "WORKFLOW WITH WORKFLOWS AS AGENTS");
 
       return Ok(result);
     }
@@ -105,7 +105,7 @@ public class ExtractorController(IExtractorWorkflowBuilder extractorWorkflowBuil
   {
     try
     {
-      ChatMessage userMessage = await BuildUserMessageAsync(request);
+      ChatMessage userMessage = await MessageHelper.BuildUserMessageAsync(request);
 
       // Build workflow.
       Workflow workflow = extractorWorkflowBuilder.BuildPipelineFromCustomOrchestrations("PipelineFromCustomOrchestrations");
@@ -115,7 +115,7 @@ public class ExtractorController(IExtractorWorkflowBuilder extractorWorkflowBuil
       await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
       // Render workflow events/output.
-      var result = await WorkflowHelper.RenderWorkflowExecutionEventsAsync(run, "WORKFLOW WITH SUBWORKFLOWS");
+      var result = await workflowHelper.RenderWorkflowExecutionEventsAsync(run, "WORKFLOW WITH SUBWORKFLOWS");
 
       return Ok(result);
     }
@@ -134,8 +134,8 @@ public class ExtractorController(IExtractorWorkflowBuilder extractorWorkflowBuil
   {
     try
     {
-      ChatMessage userMessage = await BuildUserMessageAsync(request);
-      WorkflowConsoleRenderer.PrintQueryAndInputImagePreviewAndWait(userMessage);
+      ChatMessage userMessage = await MessageHelper.BuildUserMessageAsync(request);
+      workflowRenderer.PrintQueryAndInputImagePreviewAndWait(userMessage);
 
       // Build workflow.
       Workflow workflow = extractorWorkflowBuilder.BuildFullyCustomOrchestratedPipeline("FullyCustomPipeline");
@@ -147,9 +147,9 @@ public class ExtractorController(IExtractorWorkflowBuilder extractorWorkflowBuil
       await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
       // Render workflow events/output.
-      var result = await WorkflowHelper.RenderWorkflowExecutionEventsAsync(run, "FULLY CUSTOM PIPELINE");
+      var result = await workflowHelper.RenderWorkflowExecutionEventsAsync(run, "FULLY CUSTOM PIPELINE");
 
-      WorkflowConsoleRenderer.PrintMermaidFlowPreviewAndWait(mermaidFlow);
+      workflowRenderer.PrintMermaidFlowPreviewAndWait(mermaidFlow);
 
       return Ok(result);
     }
@@ -157,41 +157,5 @@ public class ExtractorController(IExtractorWorkflowBuilder extractorWorkflowBuil
     {
       return BadRequest(ex.Message);
     }
-  }
-
-  /// <summary>
-  /// Builds the user message from request text and optional image input.
-  /// </summary>
-  private static async Task<ChatMessage> BuildUserMessageAsync(ExtractionRequest request)
-  {
-    var input = request.InputText ?? await System.IO.File.ReadAllTextAsync(Path.Combine("Data", "Input", "input.txt"));
-    var query = $"""
-      ## CONTEXT
-      Input:
-      ```
-      {input}
-      ```
-      """;
-
-    byte[] imageBytes;
-    string contentType;
-    if (request.InputImage is { Length: > 0 })
-    {
-      using var memoryStream = new MemoryStream();
-      await request.InputImage.CopyToAsync(memoryStream);
-      imageBytes = memoryStream.ToArray();
-      contentType = request.InputImage.ContentType;
-    }
-    else
-    {
-      imageBytes = await System.IO.File.ReadAllBytesAsync(Path.Combine("Data", "Input", "input.png"));
-      contentType = "image/png";
-    }
-
-    return new ChatMessage(ChatRole.User,
-    [
-      new TextContent(query),
-      new DataContent(imageBytes, contentType)
-    ]);
   }
 }
