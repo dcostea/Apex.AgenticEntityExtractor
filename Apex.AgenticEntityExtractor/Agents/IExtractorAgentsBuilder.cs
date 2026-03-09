@@ -8,7 +8,7 @@ namespace Apex.AgenticEntityExtractor.Agents
     /// <summary>
     /// Builds the single-pass extractor agent.
     /// </summary>
-    AIAgent BuildExtractorAgent(ChatProvider? provider = null);
+    AIAgent BuildSoloAgent(ChatProvider? provider = null);
 
     /// <summary>
     /// Builds an entities extraction agent, optionally suffixing the agent name.

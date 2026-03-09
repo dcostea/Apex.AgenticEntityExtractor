@@ -25,7 +25,7 @@ public class ExtractorChatClientBuilder(IConfiguration configuration) : IExtract
   {
     ChatProvider.Ollama => BuildOllamaChatClient(),
     ChatProvider.OpenAI => BuildOpenAIChatClient(),
-    ChatProvider.Nano_OpenAI => BuildNanoOpenAIChatClient(),
+    ChatProvider.Smaller_OpenAI => BuildSmallerOpenAIChatClient(),
     ChatProvider.AzureOpenAI => BuildAzureOpenAIChatClient(),
     ChatProvider.Anthropic => BuildAnthropicChatClient(),
     _ => throw new NotSupportedException($"Chat provider '{provider}' is not supported.")
@@ -81,9 +81,9 @@ public class ExtractorChatClientBuilder(IConfiguration configuration) : IExtract
   /// <summary>
   /// Builds an OpenAI chat client for the configured model.
   /// </summary>
-  private IChatClient BuildNanoOpenAIChatClient()
+  private IChatClient BuildSmallerOpenAIChatClient()
   {
-    var model = configuration["OpenAI:NanoModelId"]!;
+    var model = configuration["OpenAI:SmallerModelId"]!;
     var apiKey = configuration["OpenAI:ApiKey"]!;
 
     AnsiConsole.MarkupLine($"\n[yellow]MODEL: {Markup.Escape(model)}[/]");

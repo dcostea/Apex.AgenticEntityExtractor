@@ -28,72 +28,62 @@ builder.Services.AddSingleton<IWorkflowRenderer, SpectreWorkflowRenderer>();
 builder.Services.AddSingleton<WorkflowHelper>();
 
 // DEVUI AGENTS REGISTRATION
-builder.AddAIAgent("ExtractorSoloAgent", (sp, _) =>
-{
-  var agentBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
-  return agentBuilder.BuildExtractorAgent();
-});
-builder.AddAIAgent("EntAgent_1", (sp, _) =>
-{
-  var agentBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
-  return agentBuilder.BuildEntitiesAgent("1");
-});
-builder.AddAIAgent("EntAgent_2", (sp, _) =>
-{
-  var agentBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
-  return agentBuilder.BuildEntitiesAgent("2");
-});
-builder.AddAIAgent("EntAgent_3", (sp, _) =>
-{
-  var agentBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
-  return agentBuilder.BuildEntitiesAgent("3");
-});
-builder.AddAIAgent("RelAgent_1", (sp, _) =>
-{
-  var agentBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
-  return agentBuilder.BuildRelationshipsAgent("1");
-});
-builder.AddAIAgent("RelAgent_2", (sp, _) =>
-{
-  var agentBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
-  return agentBuilder.BuildRelationshipsAgent("2");
-});
-builder.AddAIAgent("RelAgent_3", (sp, _) =>
-{
-  var agentBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
-  return agentBuilder.BuildRelationshipsAgent("3");
-});
-builder.AddAIAgent("MermaidDiagramAgent", (sp, _) =>
-{
-  var agentBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
-  return agentBuilder.BuildMermaidDiagramAgent();
-});
-builder.AddAIAgent("MermaidReviewerAgent", (sp, _) =>
-{
-  var agentBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
-  return agentBuilder.BuildMermaidReviewerAgent();
-});
+////builder.AddAIAgent("ExtractorSoloAgent", (sp, _) =>
+////{
+////  var agentBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
+////  return agentBuilder.BuildSoloAgent();
+////});
+////builder.AddAIAgent("EntAgent_1", (sp, _) =>
+////{
+////  var agentBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
+////  return agentBuilder.BuildEntitiesAgent("1");
+////});
+////builder.AddAIAgent("EntAgent_2", (sp, _) =>
+////{
+////  var agentBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
+////  return agentBuilder.BuildEntitiesAgent("2");
+////});
+////builder.AddAIAgent("EntAgent_3", (sp, _) =>
+////{
+////  var agentBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
+////  return agentBuilder.BuildEntitiesAgent("3");
+////});
+////builder.AddAIAgent("RelAgent_1", (sp, _) =>
+////{
+////  var agentBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
+////  return agentBuilder.BuildRelationshipsAgent("1");
+////});
+////builder.AddAIAgent("RelAgent_2", (sp, _) =>
+////{
+////  var agentBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
+////  return agentBuilder.BuildRelationshipsAgent("2");
+////});
+////builder.AddAIAgent("RelAgent_3", (sp, _) =>
+////{
+////  var agentBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
+////  return agentBuilder.BuildRelationshipsAgent("3");
+////});
+////builder.AddAIAgent("MermaidDiagramAgent", (sp, _) =>
+////{
+////  var agentBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
+////  return agentBuilder.BuildMermaidDiagramAgent();
+////});
+////builder.AddAIAgent("MermaidReviewerAgent", (sp, _) =>
+////{
+////  var agentBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
+////  return agentBuilder.BuildMermaidReviewerAgent();
+////});
 
 // DEVUI WORKFLOWS REGISTRATION
-builder.AddWorkflow("SequentialPipeline", (sp, name) =>
-{
-  var workflowBuilder = sp.GetRequiredService<IExtractorWorkflowBuilder>();
-  return workflowBuilder.BuildSequentialPipeline(name);
-}).AddAsAIAgent();
 builder.AddWorkflow("PipelineFromConcurrentWorkflows", (sp, name) =>
 {
   var workflowBuilder = sp.GetRequiredService<IExtractorWorkflowBuilder>();
-  return workflowBuilder.BuildPipelineFromConcurrentWorkflows(name);
+  return workflowBuilder.BuildHighLevelPatterns(name);
 }).AddAsAIAgent();
-builder.AddWorkflow("PipelineFromCustomOrchestrations", (sp, name) =>
+builder.AddWorkflow("FullCustomWorkflow", (sp, name) =>
 {
   var workflowBuilder = sp.GetRequiredService<IExtractorWorkflowBuilder>();
-  return workflowBuilder.BuildPipelineFromCustomOrchestrations(name);
-}).AddAsAIAgent();
-builder.AddWorkflow("FullyCustomOrchestratedPipeline", (sp, name) =>
-{
-  var workflowBuilder = sp.GetRequiredService<IExtractorWorkflowBuilder>();
-  return workflowBuilder.BuildFullyCustomOrchestratedPipeline(name);
+  return workflowBuilder.BuildLowLevelFullCustomWorkflow(name);
 }).AddAsAIAgent();
 
 // CONFIGURE CONTROLLERS, SWAGGER, AND DEVUI

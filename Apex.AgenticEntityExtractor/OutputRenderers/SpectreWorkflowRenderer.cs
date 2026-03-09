@@ -33,7 +33,7 @@ internal sealed class SpectreWorkflowRenderer : IWorkflowRenderer
   public void BeginAgentStreamSection(string? authorName)
   {
     AnsiConsole.WriteLine();
-    AnsiConsole.MarkupLine($"  [cyan]🤖 [{Markup.Escape(authorName ?? "")}][/]");
+    AnsiConsole.MarkupLine($"  [cyan]🤖 [[{Markup.Escape(authorName ?? "")}]][/]");
   }
 
   public void WriteStreamingToken(string? text)

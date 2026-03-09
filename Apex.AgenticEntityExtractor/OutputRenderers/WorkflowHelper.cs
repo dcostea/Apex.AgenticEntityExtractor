@@ -34,12 +34,13 @@ public class WorkflowHelper(IWorkflowRenderer renderer)
   /// <summary>
   /// Streams a single agent's response to the console with author tracking.
   /// </summary>
-  public async Task RenderAgentResponseStreamAsync(AIAgent agent, ChatMessage message, string header)
+  public async Task<string?> RenderAgentResponseStreamAsync(AIAgent agent, ChatMessage message, string header)
   {
     renderer.PrintBanner(header);
     renderer.PrintQuery(message);
     renderer.PrintInputImage(message);
 
+    var responseBuffer = new StringBuilder();
     string? lastAuthor = null;
     await foreach (var update in agent.RunStreamingAsync(message))
     {
@@ -50,8 +51,13 @@ public class WorkflowHelper(IWorkflowRenderer renderer)
       }
 
       renderer.WriteStreamingToken(update.Text);
+
+      if (!string.IsNullOrEmpty(update.Text))
+        responseBuffer.Append(update.Text);
     }
     renderer.EndStreaming();
+
+    return responseBuffer.Length > 0 ? responseBuffer.ToString() : null;
   }
 
   /// <summary>
@@ -213,11 +219,16 @@ public class WorkflowHelper(IWorkflowRenderer renderer)
           case AgentResponseEvent agentResponse:
             state.TryExtractTools(agentResponse.Data);
             state.PendingNextResponseHeader.Add(GetShortExecutorId(agentResponse.ExecutorId));
+            state.YieldedOutputText = agentResponse.Response?.Text ?? state.YieldedOutputText;
             break;
 
           case WorkflowOutputEvent output:
-            state.TryExtractTools(output.As<List<ChatMessage>>());
-            state.YieldedOutputText = output.As<List<ChatMessage>>()?.LastOrDefault()?.Text;
+            var outputMessages = output.As<List<ChatMessage>>();
+            var outputAgentResponse = output.As<AgentResponse>();
+            state.TryExtractTools(outputMessages ?? (object?)outputAgentResponse);
+            state.YieldedOutputText = outputMessages?.LastOrDefault()?.Text
+              ?? outputAgentResponse?.Text
+              ?? state.YieldedOutputText;
             FinalizeWorkflow("🏁 Workflow completed", "Completed");
             return;
 
@@ -234,6 +245,18 @@ public class WorkflowHelper(IWorkflowRenderer renderer)
     state.FlushInProgressTimings();
     state.FlushInProgressSuperStepTimings();
     renderer.PrintPostDashboardLog(state);
+
+    // Fallback: when no event explicitly set YieldedOutputText (e.g. agent-wrapped sub-workflows
+    // where WorkflowOutputEvent carries an unrecognised payload type), use the last active agent's
+    // accumulated streaming buffer — the same data the dashboard already rendered successfully.
+    if (string.IsNullOrEmpty(state.YieldedOutputText)
+      && state.ActiveAgent is not null
+      && state.PerAgentOutput.TryGetValue(state.ActiveAgent, out var lastAgentBuffer)
+      && lastAgentBuffer.Length > 0)
+    {
+      state.YieldedOutputText = lastAgentBuffer.ToString();
+    }
+
     return state.YieldedOutputText;
   }
 

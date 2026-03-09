@@ -1,7 +1,7 @@
 # Executor Inventory Report
 
 > Auto-generated analysis of all custom `Executor`-derived classes in  
-> `Apex.AgenticEntityExtractor.Executors` (6 executors).
+> `Apex.AgenticEntityExtractor.Executors` (5 executors).
 
 ---
 
@@ -10,9 +10,8 @@
 | Executor | Processing | Graph Role | Two-Phase | Output Mechanism | Stateful |
 |---|---|---|---|---|---|
 | **FanOutExecutor** | Conventional | Entry point | ✅ | `SendMessage` (broadcast) | Buffer |
-| **MessageBatcherExecutor** | Conventional | Relay | ❌ | `SendMessage` (forward) | Stateless |
+| **BatcherExecutor** | Conventional | Relay | ❌ | `SendMessage` (forward) | Stateless |
 | **AggregatorExecutor** | Conventional | Intermediate aggregator | ❌ | `SendMessage` (forward) | Accumulator |
-| **ConcurrentAggregatorExecutor** | Conventional | Terminal aggregator | ❌ | `YieldOutput` | Accumulator |
 | **ParticipantExecutor** | Agent-fueled | Agent wrapper | ✅ | `SendMessage` (forward) | Buffer |
 | **RefinementExecutor** | Hybrid | Orchestrator hub | ✅ | `SendMessage` (targeted) + `YieldOutput` | Buffer + snapshot |
 
@@ -35,7 +34,7 @@
 
 ---
 
-### 2. MessageBatcherExecutor
+### 2. BatcherExecutor
 
 - **Processing type:** Conventional code — stateless passthrough relay.
 - **Graph role:** Per-branch identity node for fan-in barriers. Gives each branch a distinct executor ID so the barrier can track completion per agent.
@@ -57,24 +56,11 @@
 - **Two-phase pattern:** No — accumulate-and-forward (self-triggered on count threshold).
 - **Output mechanism:** `SendMessageAsync` (forward `List<ChatMessage>` + `TurnToken`).
 - **State:** `_agentResults` accumulator (`List<List<ChatMessage>>`).
-- **Notable:** Contrast with `ConcurrentAggregatorExecutor` — this one **forwards** (enabling chained fan-out/fan-in stages in a single graph) rather than yielding terminal output.
+- **Notable:** Forwards merged results downstream (enabling chained fan-out/fan-in stages in a single graph) rather than yielding terminal output.
 
 ---
 
-### 4. ConcurrentAggregatorExecutor
-
-- **Processing type:** Conventional code — count-based barrier with injected aggregation function.
-- **Graph role:** **Terminal** fan-in aggregator. Merges results and yields them as final workflow output.
-- **Message handlers (1):**
-  - `HandleMessagesAsync(List<ChatMessage>)` — async, accumulates batches; merges and yields when count reaches `numberOfConcurrentAgents`.
-- **Two-phase pattern:** No — accumulate-and-yield (self-triggered on count threshold).
-- **Output mechanism:** `YieldOutputAsync` (terminal).
-- **State:** `_agentResults` accumulator (`List<List<ChatMessage>>`).
-- **Notable:** Structurally identical to `AggregatorExecutor` except for the output mechanism. Suitable only for the last fan-in in a workflow (or in a sub-workflow wrapped via `Workflow.AsAIAgent`).
-
----
-
-### 5. ParticipantExecutor
+### 4. ParticipantExecutor
 
 - **Processing type:** **Agent-fueled** — invokes `AIAgent.RunStreamingAsync` to get LLM responses.
 - **Graph role:** Agent wrapper for star-topology group chats. Bridges the `AIAgent` streaming interface with the executor-to-executor message protocol.
@@ -88,7 +74,7 @@
 
 ---
 
-### 6. RefinementExecutor
+### 5. RefinementExecutor
 
 - **Processing type:** **Hybrid** — conventional orchestration logic that routes to agent-backed participants. Does not invoke `AIAgent` directly but controls which participant runs next.
 - **Graph role:** Star-topology hub / group chat orchestrator. Central controller that manages turn-taking, termination, and output selection.
@@ -106,18 +92,17 @@
 ## Cross-Cutting Observations
 
 ### Two-Phase Message Protocol
-Four of six executors follow the **buffer → TurnToken trigger** pattern. The exceptions are `MessageBatcherExecutor` (stateless passthrough) and both aggregators (self-triggered on count threshold). The two-phase protocol decouples data arrival from processing activation, preventing premature execution on partial input.
+Three of five executors follow the **buffer → TurnToken trigger** pattern. The exceptions are `BatcherExecutor` (stateless passthrough) and `AggregatorExecutor` (self-triggered on count threshold). The two-phase protocol decouples data arrival from processing activation, preventing premature execution on partial input.
 
 ### State & Lifecycle
-All six executors declare `declareCrossRunShareable: true` and implement `IResettableExecutor`. Only `MessageBatcherExecutor` has a true no-op reset; all others clear buffers or accumulators. `RefinementExecutor` additionally resets external state (`manager.CurrentIterationCount`).
+All five executors declare `declareCrossRunShareable: true` and implement `IResettableExecutor`. Only `BatcherExecutor` has a true no-op reset; all others clear buffers or accumulators. `RefinementExecutor` additionally resets external state (`manager.CurrentIterationCount`).
 
 ### Agent Invocation
-Only `ParticipantExecutor` directly calls `AIAgent.RunStreamingAsync`. `RefinementExecutor` orchestrates agents indirectly by routing to `ParticipantExecutor` instances. The remaining four executors are pure conventional code with no LLM interaction.
+Only `ParticipantExecutor` directly calls `AIAgent.RunStreamingAsync`. `RefinementExecutor` orchestrates agents indirectly by routing to `ParticipantExecutor` instances. The remaining three executors are pure conventional code with no LLM interaction.
 
 ### Output Mechanism Split
-- **`SendMessageAsync`** (forwarding): `FanOutExecutor`, `MessageBatcherExecutor`, `AggregatorExecutor`, `ParticipantExecutor`
-- **`YieldOutputAsync`** (terminal): `ConcurrentAggregatorExecutor`
-- **Both**: `RefinementExecutor` (targeted sends during orchestration, yield on termination)
+- **`SendMessageAsync`** (forwarding): `FanOutExecutor`, `BatcherExecutor`, `AggregatorExecutor`, `ParticipantExecutor`
+- **Both** `SendMessageAsync` + `YieldOutputAsync`: `RefinementExecutor` (targeted sends during orchestration, yield on termination)
 
 ### Sync vs Async Handlers
 Buffer-phase handlers are consistently **sync** (`void`) across all executors — correct since they only assign a field. Action-phase handlers (`HandleTurnAsync`) are **async** (`ValueTask`) since they call `SendMessageAsync` or `YieldOutputAsync`.

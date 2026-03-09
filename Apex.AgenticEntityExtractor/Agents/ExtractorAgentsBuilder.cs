@@ -26,9 +26,9 @@ public class ExtractorAgentsBuilder(IExtractorChatClientBuilder chatClientBuilde
   private static string LoadInstructions(string fileName) => _instructionsCache.GetOrAdd(fileName, f => File.ReadAllText(Path.Combine("Data", "Instructions", f)));
 
   /// <summary>
-  /// Builds the single-pass extractor agent that runs the full extraction prompt in one call.
+  /// Builds the solo-agent extractor that runs the full extraction prompt in one call.
   /// </summary>
-  public AIAgent BuildExtractorAgent(ChatProvider? provider = null)
+  public AIAgent BuildSoloAgent(ChatProvider? provider = null)
   {
     AIAgent extractorAgent = GetChatClient(provider).AsAIAgent(new ChatClientAgentOptions
     {

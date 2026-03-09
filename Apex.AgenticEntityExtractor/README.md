@@ -8,17 +8,15 @@ A progressive, hands-on learning project that teaches **multi-agent orchestratio
 
 ## What This Project Teaches
 
-The project solves a single problem (entity/relationship extraction → Mermaid diagram) using **five increasingly sophisticated orchestration strategies**, each reusing the same agents but wiring them differently:
+The project solves a single problem (entity/relationship extraction → Mermaid diagram) using **three increasingly sophisticated orchestration strategies**, each reusing the same agents but wiring them differently:
 
 | # | Strategy | Orchestration Style | Key Concept |
 |---|----------|-------------------|-------------|
 | 0 | **Single Agent** | No workflow | One prompt does everything ("god" agent) |
-| 1 | **Sequential Pipeline** | `AgentWorkflowBuilder.BuildSequential` | Decompose into specialised agents |
-| 2 | **Concurrent Sub-Workflows** | `AgentWorkflowBuilder.BuildConcurrent` + `Workflow.AsAIAgent` | Fan-out/fan-in, sub-workflow composition |
-| 3 | **Custom Sub-Workflows** | Manual `WorkflowBuilder` + custom executors, composed via `AsAIAgent` | Same topologies as #2, but hand-wired |
-| 4 | **Fully Custom Pipeline** | Single flat `WorkflowBuilder` graph with all stages | No sub-workflows, no `AsAIAgent` — everything in one graph |
+| 1 | **Pipeline from Concurrent Workflows** | `AgentWorkflowBuilder.BuildConcurrent` + `Workflow.AsAIAgent` | Fan-out/fan-in per stage, sub-workflows composed sequentially |
+| 2 | **Fully Custom Pipeline** | Single flat `WorkflowBuilder` graph with all stages | No sub-workflows, no `AsAIAgent` — everything in one graph |
 
-The progression from Strategy 0 → 4 mirrors a real-world evolution: start simple, identify bottlenecks, add parallelism, then take full control when the high-level helpers no longer fit.
+The progression from Strategy 0 → 2 mirrors a real-world evolution: start simple, decompose into specialised agents, then take full control of the execution graph.
 
 ---
 
@@ -127,24 +125,14 @@ Executors declared with `declareCrossRunShareable: true` persist across workflow
 
 ## Orchestration Strategies In Detail
 
-### Strategy 0 — Single Agent (`/extract/single-agent`)
+### Strategy 0 — Single Agent (`/extract/agents/solo`)
 
 A single "god" agent with one monolithic prompt handles entity extraction, relationship extraction, and diagram generation in a single LLM call.
 
 **Pros:** Simplest possible implementation.  
 **Cons:** No parallelism, no specialisation, prompt bloat, hard to iterate on individual stages.
 
-### Strategy 1 — Sequential Pipeline (`/extract/workflow/sequential`)
-
-Three specialised agents chained via `AgentWorkflowBuilder.BuildSequential`:
-
-```
-[Entity Agent] ──→ [Relationship Agent] ──→ [Mermaid Agent] ──→ Output
-```
-
-Each agent receives the full conversation history from all previous agents. No custom executors needed.
-
-### Strategy 2 — Concurrent Sub-Workflows (`/extract/workflow/as-agents`)
+### Strategy 1 — Pipeline from Concurrent Workflows (`/extract/workflow/as-agents`)
 
 Each stage is a concurrent workflow (3 agents in parallel) or a group chat, built with `AgentWorkflowBuilder` high-level helpers and wrapped via `Workflow.AsAIAgent`:
 
@@ -154,19 +142,7 @@ Each stage is a concurrent workflow (3 agents in parallel) or a group chat, buil
 
 The outer pipeline uses `BuildSequential` — it doesn't know (or care) that each "agent" is actually a full concurrent workflow internally.
 
-### Strategy 3 — Custom Sub-Workflows (`/extract/workflow/sub-workflows`)
-
-Functionally identical to Strategy 2, but each sub-workflow is hand-wired using `WorkflowBuilder`, custom executors, and explicit edges. This is where the learning happens:
-
-- **`FanOutExecutor`** — buffers messages and broadcasts on `TurnToken`.
-- **`MessageBatcherExecutor`** — per-branch identity node for fan-in barriers.
-- **`ConcurrentAggregatorExecutor`** — count-based barrier that merges results and yields output.
-- **`ParticipantExecutor`** — wraps an `AIAgent` as an executor, handling streaming and event emission.
-- **`RefinementExecutor`** — star-topology hub that implements round-robin group chat orchestration.
-
-Each sub-workflow is still wrapped via `AsAIAgent` and composed sequentially.
-
-### Strategy 4 — Fully Custom Pipeline (`/extract/workflow/fully-custom`)
+### Strategy 2 — Fully Custom Pipeline (`/extract/workflows/custom`)
 
 All three stages live in a **single flat `WorkflowBuilder` graph** — no sub-workflows, no `AsAIAgent`.
 
@@ -181,7 +157,7 @@ All three stages live in a **single flat `WorkflowBuilder` graph** — no sub-wo
               [RefinementExecutor] ←──→ [Builder / Reviewer] ──→ Output
 ```
 
-This requires **forwarding aggregators** (`AggregatorExecutor`) instead of terminal ones — they send `List<ChatMessage>` + `TurnToken` downstream rather than yielding output. The inter-stage handoff is the key difference from Strategy 3.
+This requires **forwarding aggregators** (`AggregatorExecutor`) instead of terminal ones — they send `List<ChatMessage>` + `TurnToken` downstream rather than yielding output, keeping all stages inside the same graph.
 
 In the refinement stage, participant executors run with `includeInputInOutput: false`, and `RefinementExecutor` composes clean per-turn conversations from a captured base context (`_baseContext`) plus the latest builder/reviewer response. This avoids context bloat and response parroting across turns.
 
@@ -192,22 +168,21 @@ In the refinement stage, participant executors run with `includeInputInOutput: f
 | Executor | Role | Two-Phase | Agent-Fueled |
 |---|---|---|---|
 | `FanOutExecutor` | Broadcasts buffered messages to all downstream edges | ✅ | ❌ |
-| `MessageBatcherExecutor` | Stateless relay — gives each branch a distinct identity for the barrier | ❌ | ❌ |
+| `BatcherExecutor` | Stateless relay — gives each branch a distinct identity for the barrier | ❌ | ❌ |
 | `AggregatorExecutor` | Forwarding fan-in — merges N results and sends downstream | ❌ | ❌ |
-| `ConcurrentAggregatorExecutor` | Terminal fan-in — merges N results and yields as output | ❌ | ❌ |
 | `ParticipantExecutor` | Wraps an `AIAgent` — streams responses and forwards results | ✅ | ✅ |
 | `RefinementExecutor` | Star-topology hub — manages turn-taking, termination, output selection | ✅ | Hybrid |
 
 ### Two-Phase Message Protocol
 
-Four of six executors buffer data in phase 1 (sync handler) and act in phase 2 (async `TurnToken` handler):
+Three of five executors buffer data in phase 1 (sync handler) and act in phase 2 (async `TurnToken` handler):
 
 ```
 Phase 1: HandleMessages(List<ChatMessage>) → _messages = messages;     // sync, just buffer
 Phase 2: HandleTurnAsync(TurnToken)        → process and send/yield    // async, does the work
 ```
 
-The two aggregators are self-triggered (they fire when their count threshold is reached) and don't use `TurnToken`.
+`AggregatorExecutor` is self-triggered (fires when its count threshold is reached) and does not use `TurnToken`.
 
 ### The Swap-and-Clear Pattern
 
@@ -232,12 +207,11 @@ Apex.AgenticEntityExtractor/
 │   └── ExtractorAgentsBuilder.cs     # Creates AIAgents with instructions + tools
 ├── Workflows/
 │   ├── IExtractorWorkflowBuilder.cs  # Workflow factory interface
-│   └── ExtractorWorkflowBuilder.cs   # All 4 strategies + sub-workflows
+│   └── ExtractorWorkflowBuilder.cs   # Both strategies
 ├── Executors/
 │   ├── FanOutExecutor.cs             # Fan-out entry point
-│   ├── MessageBatcherExecutor.cs     # Per-branch barrier identity
+│   ├── BatcherExecutor.cs            # Per-branch barrier identity
 │   ├── AggregatorExecutor.cs         # Forwarding fan-in (intermediate)
-│   ├── ConcurrentAggregatorExecutor.cs # Terminal fan-in (yields output)
 │   ├── ParticipantExecutor.cs        # AIAgent wrapper for group chats
 │   └── RefinementExecutor.cs         # Star-topology group chat hub
 ├── Aggregators/
@@ -286,7 +260,7 @@ Set the active provider in `appsettings.json`:
 }
 ```
 
-Supported providers: `Ollama`, `OpenAI`, `NanoOpenAI`, `AzureOpenAI`, `Anthropic`.
+Supported providers: `Ollama`, `OpenAI`, `Smaller_OpenAI`, `AzureOpenAI`, `Anthropic`.
 
 ### API Keys
 
@@ -326,11 +300,9 @@ It also maps OpenAI-compatible responses and conversation endpoints via:
 
 | Endpoint | Strategy | Description |
 |---|---|---|
-| `POST /extract/single-agent` | 0 | Single "god" agent |
-| `POST /extract/workflow/sequential` | 1 | Sequential pipeline |
-| `POST /extract/workflow/as-agents` | 2 | Concurrent sub-workflows (high-level) |
-| `POST /extract/workflow/sub-workflows` | 3 | Custom sub-workflows (hand-wired) |
-| `POST /extract/workflow/fully-custom` | 4 | Single flat graph (all custom) |
+| `POST /extract/agents/solo` | 0 | Single "god" agent |
+| `POST /extract/workflow/as-agents` | 1 | Pipeline from concurrent sub-workflows |
+| `POST /extract/workflows/custom` | 2 | Single flat graph (all custom) |
 
 All endpoints accept `multipart/form-data` with optional `InputText` (string) and `InputImage` (file). When omitted, defaults from `Data/Input/` are used.
 

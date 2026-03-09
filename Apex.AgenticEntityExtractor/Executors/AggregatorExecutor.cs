@@ -22,14 +22,7 @@ namespace Apex.AgenticEntityExtractor.Executors;
 /// <c>List&lt;ChatMessage&gt;</c>, which is <b>forwarded</b> downstream together with a
 /// <see cref="TurnToken"/> to trigger the next stage.
 ///
-/// <b>Contrast with <see cref="ConcurrentAggregatorExecutor"/>:</b>
-/// <see cref="ConcurrentAggregatorExecutor"/> <i>yields</i> the merged result as final
-/// workflow output (<see cref="IWorkflowContext.YieldOutputAsync"/>), making it suitable
-/// for terminal fan-in. This executor instead <i>sends</i> the result via
-/// <see cref="IWorkflowContext.SendMessageAsync"/>, allowing multiple fan-out/fan-in stages
-/// to be chained within a single <see cref="WorkflowBuilder"/> graph.
-///
-/// <b>Cross-run state:</b> Declared as <c>declareCrossRunShareable: true</c> and implements
+/// <b>Cross-run state:</b>
 /// <see cref="IResettableExecutor"/> so that <c>_agentResults</c> is cleared between runs,
 /// preventing stale data from leaking across invocations.
 /// </summary>

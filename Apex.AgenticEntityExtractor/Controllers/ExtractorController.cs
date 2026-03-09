@@ -18,48 +18,21 @@ namespace Apex.AgenticEntityExtractor.Controllers;
 public class ExtractorController(IExtractorWorkflowBuilder extractorWorkflowBuilder, IExtractorAgentsBuilder extractorAgentsBuilder, WorkflowHelper workflowHelper, IWorkflowRenderer workflowRenderer) : ControllerBase
 {
   /// <summary>
-  /// Runs the single-agent extraction path.
+  /// Runs the solo-agent extraction path.
   /// </summary>
-  [HttpPost("/extract/single-agent")]
+  [HttpPost("/extract/agents/solo")]
   [Consumes("multipart/form-data")]
-  public async Task<IActionResult> RunSingleAgentExtractionAsync([FromForm] ExtractionRequest request)
+  public async Task<IActionResult> RunSoloAgentAsync([FromForm] ExtractionRequest request)
   {
     try
     {
       ChatMessage userMessage = await MessageHelper.BuildUserMessageAsync(request);
 
       // Build the single extractor agent.
-      AIAgent extractorAgent = extractorAgentsBuilder.BuildExtractorAgent();
+      AIAgent extractorAgent = extractorAgentsBuilder.BuildSoloAgent();
 
       // Run and render streamed output.
-      await workflowHelper.RenderAgentResponseStreamAsync(extractorAgent, userMessage, "SINGLE AGENT EXTRACTION");
-
-      return Ok();
-    }
-    catch (Exception ex)
-    {
-      return BadRequest(ex.Message);
-    }
-  }
-
-  /// <summary>
-  /// Runs the sequential workflow path.
-  /// </summary>
-  [HttpPost("/extract/workflow/sequential")]
-  [Consumes("multipart/form-data")]
-  public async Task<IActionResult> RunSequentialWorkflowAsync([FromForm] ExtractionRequest request)
-  {
-    try
-    {
-      ChatMessage userMessage = await MessageHelper.BuildUserMessageAsync(request);
-
-      // Build workflow.
-      Workflow workflow = extractorWorkflowBuilder.BuildSequentialPipeline("SequentialPipeline");
-      await using StreamingRun run = await InProcessExecution.RunStreamingAsync(workflow, userMessage);
-
-      // Trigger execution and render workflow events/output.
-      await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
-      var result = await workflowHelper.RenderWorkflowExecutionEventsAsync(run, "WORKFLOW WITH SIMPLE SEQUENTIAL AGENTS");
+      string? result = await workflowHelper.RenderAgentResponseStreamAsync(extractorAgent, userMessage, "SOLO AGENT EXTRACTION");
 
       return Ok(result);
     }
@@ -70,52 +43,23 @@ public class ExtractorController(IExtractorWorkflowBuilder extractorWorkflowBuil
   }
 
   /// <summary>
-  /// Runs the workflow-composition path where sub-workflows are wrapped as agents.
+  /// Runs the pipeline-from-concurrent-workflows path.
   /// </summary>
-  [HttpPost("/extract/workflow/as-agents")]
+  [HttpPost("/extract/patterns")]
   [Consumes("multipart/form-data")]
-  public async Task<IActionResult> RunConcurrentWorkflowAsync([FromForm] ExtractionRequest request)
+  public async Task<IActionResult> RunHighLevelPatternsAsync([FromForm] ExtractionRequest request)
   {
     try
     {
       ChatMessage userMessage = await MessageHelper.BuildUserMessageAsync(request);
 
       // Build workflow.
-      Workflow workflow = extractorWorkflowBuilder.BuildPipelineFromConcurrentWorkflows("PipelineFromConcurrentWorkflows");
+      Workflow workflow = extractorWorkflowBuilder.BuildHighLevelPatterns("PipelineFromConcurrentWorkflows");
       await using StreamingRun run = await InProcessExecution.RunStreamingAsync(workflow, userMessage);
 
       // Trigger execution and render workflow events/output.
       await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
-      var result = await workflowHelper.RenderWorkflowExecutionEventsAsync(run, "WORKFLOW WITH WORKFLOWS AS AGENTS");
-
-      return Ok(result);
-    }
-    catch (Exception ex)
-    {
-      return BadRequest(ex.Message);
-    }
-  }
-
-  /// <summary>
-  /// Runs the custom-orchestration sub-workflow composition path.
-  /// </summary>
-  [HttpPost("/extract/workflow/sub-workflows")]
-  [Consumes("multipart/form-data")]
-  public async Task<IActionResult> RunCustomOrchestrationsWorkflowAsync([FromForm] ExtractionRequest request)
-  {
-    try
-    {
-      ChatMessage userMessage = await MessageHelper.BuildUserMessageAsync(request);
-
-      // Build workflow.
-      Workflow workflow = extractorWorkflowBuilder.BuildPipelineFromCustomOrchestrations("PipelineFromCustomOrchestrations");
-      await using StreamingRun run = await InProcessExecution.RunStreamingAsync(workflow, userMessage);
-
-      // Trigger execution with event emission enabled.
-      await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
-
-      // Render workflow events/output.
-      var result = await workflowHelper.RenderWorkflowExecutionEventsAsync(run, "WORKFLOW WITH SUBWORKFLOWS");
+      var result = await workflowHelper.RenderWorkflowExecutionEventsAsync(run, "PIPELINE FROM CONCURRENT WORKFLOWS");
 
       return Ok(result);
     }
@@ -128,9 +72,9 @@ public class ExtractorController(IExtractorWorkflowBuilder extractorWorkflowBuil
   /// <summary>
   /// Runs the fully custom low-level orchestration pipeline.
   /// </summary>
-  [HttpPost("/extract/workflow/fully-custom")]
+  [HttpPost("/extract/workflows")]
   [Consumes("multipart/form-data")]
-  public async Task<IActionResult> RunFullyCustomWorkflowAsync([FromForm] ExtractionRequest request)
+  public async Task<IActionResult> RunLowLevelWorkflowAsync([FromForm] ExtractionRequest request)
   {
     try
     {
@@ -138,7 +82,7 @@ public class ExtractorController(IExtractorWorkflowBuilder extractorWorkflowBuil
       workflowRenderer.PrintQueryAndInputImagePreviewAndWait(userMessage);
 
       // Build workflow.
-      Workflow workflow = extractorWorkflowBuilder.BuildFullyCustomOrchestratedPipeline("FullyCustomPipeline");
+      Workflow workflow = extractorWorkflowBuilder.BuildLowLevelFullCustomWorkflow("FullCustomWorkflow");
       var mermaidFlow = workflow.ToMermaidString();
 
       await using StreamingRun run = await InProcessExecution.RunStreamingAsync(workflow, userMessage);
@@ -147,7 +91,7 @@ public class ExtractorController(IExtractorWorkflowBuilder extractorWorkflowBuil
       await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
       // Render workflow events/output.
-      var result = await workflowHelper.RenderWorkflowExecutionEventsAsync(run, "FULLY CUSTOM PIPELINE");
+      var result = await workflowHelper.RenderWorkflowExecutionEventsAsync(run, "FULL CUSTOM WORKFLOW");
 
       workflowRenderer.PrintMermaidFlowPreviewAndWait(mermaidFlow);
 
