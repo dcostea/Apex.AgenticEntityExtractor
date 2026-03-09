@@ -5,7 +5,7 @@ namespace Apex.AgenticEntityExtractor.Executors;
 
 /// <summary>
 /// <b>Forwarding Fan-In Aggregator</b> — an intermediate aggregation node for use inside
-/// a flat, single-graph pipeline where the aggregated result must flow to the next stage
+/// a flat, single-graph workflow where the aggregated result must flow to the next stage
 /// rather than exiting the workflow.
 ///
 /// <b>Role in the graph:</b>

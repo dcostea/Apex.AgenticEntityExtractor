@@ -32,7 +32,7 @@ public class ExtractorController(IExtractorWorkflowBuilder extractorWorkflowBuil
       AIAgent extractorAgent = extractorAgentsBuilder.BuildSoloAgent();
 
       // Run and render streamed output.
-      string? result = await workflowHelper.RenderAgentResponseStreamAsync(extractorAgent, userMessage, "SOLO AGENT EXTRACTION");
+      string? result = await workflowHelper.RenderAgentResponseStreamAsync(extractorAgent, userMessage, "USING SOLO AGENT");
 
       return Ok(result);
     }
@@ -43,7 +43,7 @@ public class ExtractorController(IExtractorWorkflowBuilder extractorWorkflowBuil
   }
 
   /// <summary>
-  /// Runs the pipeline-from-concurrent-workflows path.
+  /// Runs the workflow-from-concurrent-workflows path.
   /// </summary>
   [HttpPost("/extract/patterns")]
   [Consumes("multipart/form-data")]
@@ -54,12 +54,19 @@ public class ExtractorController(IExtractorWorkflowBuilder extractorWorkflowBuil
       ChatMessage userMessage = await MessageHelper.BuildUserMessageAsync(request);
 
       // Build workflow.
-      Workflow workflow = extractorWorkflowBuilder.BuildHighLevelPatterns("PipelineFromConcurrentWorkflows");
+      Workflow workflow = extractorWorkflowBuilder.BuildHighLevelPatterns("OrchestrationPatterns");
       await using StreamingRun run = await InProcessExecution.RunStreamingAsync(workflow, userMessage);
 
-      // Trigger execution and render workflow events/output.
+      // Trigger execution with event emission enabled.
       await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
-      var result = await workflowHelper.RenderWorkflowExecutionEventsAsync(run, "PIPELINE FROM CONCURRENT WORKFLOWS");
+
+      // Render workflow events/output.
+      var result = await workflowHelper.RenderWorkflowExecutionEventsAsync(run, "USING ORCHESTRATION PATTERNS");
+
+      var mermaidFlow = workflow.ToMermaidString();
+      workflowRenderer.PrintMermaidFlowPreview(mermaidFlow);
+      workflowRenderer.PrintQuery(userMessage);
+      workflowRenderer.PrintInputImage(userMessage);
 
       return Ok(result);
     }
@@ -70,7 +77,7 @@ public class ExtractorController(IExtractorWorkflowBuilder extractorWorkflowBuil
   }
 
   /// <summary>
-  /// Runs the fully custom low-level orchestration pipeline.
+  /// Runs the fully custom low-level orchestration workflow.
   /// </summary>
   [HttpPost("/extract/workflows")]
   [Consumes("multipart/form-data")]
@@ -79,11 +86,9 @@ public class ExtractorController(IExtractorWorkflowBuilder extractorWorkflowBuil
     try
     {
       ChatMessage userMessage = await MessageHelper.BuildUserMessageAsync(request);
-      workflowRenderer.PrintQueryAndInputImagePreviewAndWait(userMessage);
 
       // Build workflow.
       Workflow workflow = extractorWorkflowBuilder.BuildLowLevelFullCustomWorkflow("FullCustomWorkflow");
-      var mermaidFlow = workflow.ToMermaidString();
 
       await using StreamingRun run = await InProcessExecution.RunStreamingAsync(workflow, userMessage);
 
@@ -91,9 +96,12 @@ public class ExtractorController(IExtractorWorkflowBuilder extractorWorkflowBuil
       await run.TrySendMessageAsync(new TurnToken(emitEvents: true));
 
       // Render workflow events/output.
-      var result = await workflowHelper.RenderWorkflowExecutionEventsAsync(run, "FULL CUSTOM WORKFLOW");
+      var result = await workflowHelper.RenderWorkflowExecutionEventsAsync(run, "USING FULL CUSTOM WORKFLOW");
 
-      workflowRenderer.PrintMermaidFlowPreviewAndWait(mermaidFlow);
+      var mermaidFlow = workflow.ToMermaidString();
+      workflowRenderer.PrintMermaidFlowPreview(mermaidFlow);
+      workflowRenderer.PrintQuery(userMessage);
+      workflowRenderer.PrintInputImage(userMessage);
 
       return Ok(result);
     }

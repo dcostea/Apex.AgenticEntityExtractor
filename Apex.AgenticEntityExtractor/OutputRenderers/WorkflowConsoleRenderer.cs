@@ -32,7 +32,7 @@ internal static class WorkflowConsoleRenderer
     PrintInputImage(message);
   }
 
-  internal static void PrintMermaidFlowPreviewAndWait(string mermaidFlow)
+  internal static void PrintMermaidFlowPreview(string mermaidFlow)
   {
     if (string.IsNullOrWhiteSpace(mermaidFlow))
       return;

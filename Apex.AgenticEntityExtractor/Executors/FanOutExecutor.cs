@@ -54,7 +54,7 @@ public partial class FanOutExecutor(string executorId)
   [MessageHandler]
   private async ValueTask HandleTurnAsync(TurnToken token, IWorkflowContext context, CancellationToken cancellationToken)
   {
-    // No messages buffered — spurious TurnToken, nothing to broadcast
+    // No messages buffered — nothing to broadcast
     if (_messages.Count == 0)
       return;
 

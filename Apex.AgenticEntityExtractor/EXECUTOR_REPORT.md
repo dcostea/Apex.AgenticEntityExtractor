@@ -30,7 +30,7 @@
 - **Two-phase pattern:** Yes — buffer first, broadcast on `TurnToken`.
 - **Output mechanism:** `SendMessageAsync` (broadcast to all edges).
 - **State:** `_messages` buffer; swap-and-clear on broadcast.
-- **Notable:** Only executor with two buffer handlers (`ChatMessage` and `List<ChatMessage>`) because it can be either a workflow entry point or a mid-pipeline receiver.
+- **Notable:** Only executor with two buffer handlers (`ChatMessage` and `List<ChatMessage>`) because it can be either a workflow entry point or a mid-workflow receiver.
 
 ---
 

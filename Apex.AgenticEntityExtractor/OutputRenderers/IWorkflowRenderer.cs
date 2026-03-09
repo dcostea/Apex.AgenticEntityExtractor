@@ -14,8 +14,7 @@ public interface IWorkflowRenderer
   void PrintBanner(string header);
   void PrintQuery(ChatMessage message);
   void PrintInputImage(ChatMessage message);
-  void PrintQueryAndInputImagePreviewAndWait(ChatMessage message);
-  void PrintMermaidFlowPreviewAndWait(string mermaidFlow);
+  void PrintMermaidFlowPreview(string mermaidFlow);
   void PrintPostDashboardLog(DashboardState state);
 
   // ── Agent response streaming (non-dashboard) ──

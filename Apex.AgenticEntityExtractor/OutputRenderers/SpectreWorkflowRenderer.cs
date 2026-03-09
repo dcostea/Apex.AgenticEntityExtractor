@@ -18,11 +18,8 @@ internal sealed class SpectreWorkflowRenderer : IWorkflowRenderer
   public void PrintInputImage(ChatMessage message)
     => WorkflowConsoleRenderer.PrintInputImage(message);
 
-  public void PrintQueryAndInputImagePreviewAndWait(ChatMessage message)
-    => WorkflowConsoleRenderer.PrintQueryAndInputImagePreviewAndWait(message);
-
-  public void PrintMermaidFlowPreviewAndWait(string mermaidFlow)
-    => WorkflowConsoleRenderer.PrintMermaidFlowPreviewAndWait(mermaidFlow);
+  public void PrintMermaidFlowPreview(string mermaidFlow)
+    => WorkflowConsoleRenderer.PrintMermaidFlowPreview(mermaidFlow);
 
   public void PrintPostDashboardLog(DashboardState state)
   {

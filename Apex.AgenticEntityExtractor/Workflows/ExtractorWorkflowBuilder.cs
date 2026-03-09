@@ -29,7 +29,7 @@ namespace Apex.AgenticEntityExtractor.Workflows;
 public class ExtractorWorkflowBuilder(IExtractorAgentsBuilder agentsBuilder) : IExtractorWorkflowBuilder
 {
   // ════════════════════════════════════════════════════════════════════════
-  //  STRATEGY 1 — HIGH-LEVEL WORKFLOWS (AgentWorkflowBuilder helpers)
+  //  STRATEGY 1 — ORCHESTRATON PATTERN (HIGH-LEVEL orchestration patterns)
   //
   //  Sub-workflows are built using high-level AgentWorkflowBuilder helpers;
   //  the framework handles all executor/edge wiring internally.
@@ -37,8 +37,8 @@ public class ExtractorWorkflowBuilder(IExtractorAgentsBuilder agentsBuilder) : I
 
   /// <summary>
   /// <b>Strategy 1:</b> Composes high-level concurrent and group-chat workflows as agents
-  /// in a sequential pipeline. Each inner workflow is wrapped via <see cref="Workflow.AsAIAgent"/>
-  /// so it behaves like a single agent from the outer pipeline's perspective.
+  /// in a sequential workflow. Each inner workflow is wrapped via <see cref="Workflow.AsAIAgent"/>
+  /// so it behaves like a single agent from the outer workflow's perspective.
   /// </summary>
   public Workflow BuildHighLevelPatterns(string workflowName)
   {
@@ -46,7 +46,7 @@ public class ExtractorWorkflowBuilder(IExtractorAgentsBuilder agentsBuilder) : I
     Workflow relationshipExtractionWorkflow = BuildConcurrentRelationshipExtraction("ConcurrentRelationshipExtraction");
     Workflow mermaidDiagramWorkflow = BuildMermaidDiagramGroupChat("MermaidDiagramGroupChat");
 
-    // Wrap each workflow as an AIAgent so the outer sequential pipeline can chain them
+    // Wrap each workflow as an AIAgent so the outer sequential workflow can chain them
     return AgentWorkflowBuilder.BuildSequential(workflowName,
       [
         entityExtractionWorkflow.AsAIAgent("ConcurrentEntityExtraction"),
@@ -56,14 +56,14 @@ public class ExtractorWorkflowBuilder(IExtractorAgentsBuilder agentsBuilder) : I
   }
 
   // ════════════════════════════════════════════════════════════════════════
-  //  STRATEGY 2 — FULLY CUSTOM PIPELINE (manual executors + edges)
+  //  STRATEGY 2 — FULLY CUSTOM WORKFLOW (LOW-LEVEL: manual executors + edges)
   //
   //  All stages live in a single flat WorkflowBuilder graph; every executor
   //  and edge is wired explicitly with no sub-workflows or AsAIAgent wrapping.
   // ════════════════════════════════════════════════════════════════════════
 
   /// <summary>
-  /// <b>Strategy 2:</b> Fully custom single pipeline — every executor and edge lives in one
+  /// <b>Strategy 2:</b> Fully custom single workflow — every executor and edge lives in one
   /// flat <see cref="WorkflowBuilder"/> graph. No sub-workflows, no <see cref="Workflow.AsAIAgent"/>,
   /// no <see cref="AgentWorkflowBuilder"/> helpers.
   /// <code>
@@ -82,29 +82,26 @@ public class ExtractorWorkflowBuilder(IExtractorAgentsBuilder agentsBuilder) : I
   /// </summary>
   public Workflow BuildLowLevelFullCustomWorkflow(string workflowName)
   {
-    // ── Create entity agents ──────────────────────────────────────────────
     AIAgent entityAgent1 = agentsBuilder.BuildEntitiesAgent("1", ChatProvider.Smaller_OpenAI);
     AIAgent entityAgent2 = agentsBuilder.BuildEntitiesAgent("2", ChatProvider.Smaller_OpenAI);
     AIAgent entityAgent3 = agentsBuilder.BuildEntitiesAgent("3", ChatProvider.Smaller_OpenAI);
 
-    // ── Create relationship agents ───────────────────────────────────────
     AIAgent relationshipAgent1 = agentsBuilder.BuildRelationshipsAgent("1", ChatProvider.Smaller_OpenAI);
     AIAgent relationshipAgent2 = agentsBuilder.BuildRelationshipsAgent("2", ChatProvider.Smaller_OpenAI);
     AIAgent relationshipAgent3 = agentsBuilder.BuildRelationshipsAgent("3", ChatProvider.Smaller_OpenAI);
 
-    // ── Create diagram builder/reviewer agents ─────────────────────────
     AIAgent diagramBuilderAgent = agentsBuilder.BuildMermaidDiagramAgent(ChatProvider.OpenAI);
     AIAgent diagramReviewerAgent = agentsBuilder.BuildMermaidReviewerAgent(ChatProvider.OpenAI);
 
-    // ── Stage 1: Entity extraction (fan-out / fan-in) ─────────────────
+    // ── Stage 1: Entity extraction (fan-out / fan-in) 
     FanOutExecutor entityFanOut = new("EntityFanOut");
     AggregatorExecutor entityAggregator = new("EntityAggregator", 3, Aggregator.AggregateEntities);
 
-    // ── Stage 2: Relationship extraction (fan-out / fan-in) ───────────
+    // ── Stage 2: Relationship extraction (fan-out / fan-in) 
     FanOutExecutor relationshipFanOut = new("RelationshipFanOut");
     AggregatorExecutor relationshipAggregator = new("RelationshipAggregator", 3, Aggregator.AggregateRelationships);
 
-    // ── Stage 3: Mermaid diagram refinement (star-topology group chat) ──────
+    // ── Stage 3: Mermaid diagram refinement (star-topology group chat) 
     ParticipantExecutor builderParticipant = new(diagramBuilderAgent, includeInputInOutput: false);
     ParticipantExecutor reviewerParticipant = new(diagramReviewerAgent, includeInputInOutput: false);
 
@@ -115,7 +112,7 @@ public class ExtractorWorkflowBuilder(IExtractorAgentsBuilder agentsBuilder) : I
     };
     RefinementExecutor mermaidRefiner = new("MermaidRefiner", diagramBuilderAgent, builderParticipant, reviewerParticipant, approvalManager);
 
-    // ── Wire the single flat graph (all stages share one WorkflowBuilder) ───
+    // ── Wire the single flat graph (all stages share one WorkflowBuilder) 
     WorkflowBuilder workflowBuilder = new(entityFanOut);
 
     // Stage 1 edges: fan-out → entity agents → batchers → fan-in barrier → forwarding aggregator
@@ -156,6 +153,7 @@ public class ExtractorWorkflowBuilder(IExtractorAgentsBuilder agentsBuilder) : I
 
     return workflowBuilder.Build();
   }
+
 
   /// <summary>
   /// Builds a concurrent entity extraction workflow using <see cref="AgentWorkflowBuilder.BuildConcurrent"/>.
