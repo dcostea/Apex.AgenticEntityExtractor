@@ -36,8 +36,10 @@ public class ExtractorAgentsBuilder(IExtractorChatClientBuilder chatClientBuilde
       ChatOptions = new ChatOptions
       {
         Instructions = LoadInstructions("ExtractorSoloAgent.md"),
-        MaxOutputTokens = 1000,
-        //Temperature = 0.1F,
+        Reasoning = new ReasoningOptions
+        {
+          Effort = ReasoningEffort.None
+        },
       }
     });
 

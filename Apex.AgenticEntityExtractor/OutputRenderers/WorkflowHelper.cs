@@ -37,10 +37,8 @@ public class WorkflowHelper(IWorkflowRenderer renderer)
   public async Task<string?> RenderAgentResponseStreamAsync(AIAgent agent, ChatMessage message, string header)
   {
     renderer.PrintBanner(header);
-    renderer.PrintQuery(message);
-    renderer.PrintInputImage(message);
 
-    var responseBuffer = new StringBuilder();
+    List<AgentResponseUpdate> allUpdates = [];
     string? lastAuthor = null;
     await foreach (var update in agent.RunStreamingAsync(message))
     {
@@ -51,13 +49,17 @@ public class WorkflowHelper(IWorkflowRenderer renderer)
       }
 
       renderer.WriteStreamingToken(update.Text);
-
-      if (!string.IsNullOrEmpty(update.Text))
-        responseBuffer.Append(update.Text);
+      allUpdates.Add(update);
     }
+
+    renderer.PrintQuery(message);
+    renderer.PrintInputImage(message);
     renderer.EndStreaming();
 
-    return responseBuffer.Length > 0 ? responseBuffer.ToString() : null;
+    // AgentResponseUpdate.Text only concatenates TextContent items from Contents, so it returns ""
+    // for metadata/role/finish-reason updates. ToAgentResponse properly assembles the full
+    // response text across all update types, matching how ParticipantExecutor retrieves content.
+    return allUpdates.ToAgentResponse()?.Text;
   }
 
   /// <summary>
