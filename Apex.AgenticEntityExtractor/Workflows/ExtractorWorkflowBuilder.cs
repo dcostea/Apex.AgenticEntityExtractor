@@ -154,7 +154,6 @@ public class ExtractorWorkflowBuilder(IExtractorAgentsBuilder agentsBuilder) : I
     return workflowBuilder.Build();
   }
 
-
   /// <summary>
   /// Builds a concurrent entity extraction workflow using <see cref="AgentWorkflowBuilder.BuildConcurrent"/>.
   /// The framework internally creates the fan-out/fan-in topology.
