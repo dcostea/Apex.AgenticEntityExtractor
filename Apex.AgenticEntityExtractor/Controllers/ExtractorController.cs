@@ -1,4 +1,5 @@
 ﻿using Apex.AgenticEntityExtractor.Agents;
+using Apex.AgenticEntityExtractor.Enums;
 using Apex.AgenticEntityExtractor.Helpers;
 using Apex.AgenticEntityExtractor.Models;
 using Apex.AgenticEntityExtractor.OutputRenderers;
@@ -26,10 +27,10 @@ public class ExtractorController(IExtractorWorkflowBuilder extractorWorkflowBuil
   {
     try
     {
-      ChatMessage userMessage = await MessageHelper.BuildUserMessageAsync(request);
+      Microsoft.Extensions.AI.ChatMessage userMessage = await MessageHelper.BuildUserMessageAsync(request);
 
       // Build the single extractor agent.
-      AIAgent extractorAgent = extractorAgentsBuilder.BuildSoloAgent();
+      AIAgent extractorAgent = extractorAgentsBuilder.BuildSoloAgent(ChatProvider.Smaller_OpenAI);
 
       // Run and render streamed output.
       string? result = await workflowHelper.RenderAgentResponseStreamAsync(extractorAgent, userMessage, "USING SOLO AGENT");

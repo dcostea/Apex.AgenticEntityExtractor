@@ -60,7 +60,7 @@ public sealed partial class ParticipantExecutor(AIAgent agent, bool includeInput
 
     // Stream the agent's response, collecting updates (and optionally emitting live events)
     List<AgentResponseUpdate> updates = [];
-    await foreach (var update in agent.RunStreamingAsync(messages, cancellationToken: cancellationToken))
+    await foreach (var update in agent.RunStreamingAsync(messages: messages, cancellationToken: cancellationToken))
     {
       updates.Add(update);
       if (token.EmitEvents is true)

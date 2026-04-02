@@ -2,7 +2,7 @@
 using Apex.AgenticEntityExtractor.Enums;
 using Azure.AI.OpenAI;
 using Microsoft.Extensions.AI;
-using OllamaSharp;
+//using OllamaSharp;
 using OpenAI;
 using Spectre.Console;
 using System.ClientModel;
@@ -23,7 +23,7 @@ public class ExtractorChatClientBuilder(IConfiguration configuration) : IExtract
 
   private IChatClient BuildChatClient(ChatProvider provider) => provider switch
   {
-    ChatProvider.Ollama => BuildOllamaChatClient(),
+    //ChatProvider.Ollama => BuildOllamaChatClient(),
     ChatProvider.OpenAI => BuildOpenAIChatClient(),
     ChatProvider.Smaller_OpenAI => BuildSmallerOpenAIChatClient(),
     ChatProvider.AzureOpenAI => BuildAzureOpenAIChatClient(),
@@ -103,27 +103,27 @@ public class ExtractorChatClientBuilder(IConfiguration configuration) : IExtract
   /// <summary>
   /// Builds an Ollama chat client and prints detected model capabilities.
   /// </summary>
-  private IChatClient BuildOllamaChatClient()
-  {
-    string model = configuration["Ollama:Model"]!;
-    string ollamaServer = configuration["Ollama:Server"]!;
+  //private IChatClient BuildOllamaChatClient()
+  //{
+  //  string model = configuration["Ollama:Model"]!;
+  //  string ollamaServer = configuration["Ollama:Server"]!;
 
-    var chatClient = new OllamaApiClient(ollamaServer, model);
+  //  var chatClient = new OllamaApiClient(ollamaServer, model);
 
-    var modelInfo = chatClient.ShowModelAsync(model).Result;
-    AnsiConsole.MarkupLine($"\n[yellow]MODEL: {Markup.Escape(model)}[/]");
+  //  var modelInfo = chatClient.ShowModelAsync(model).Result;
+  //  AnsiConsole.MarkupLine($"\n[yellow]MODEL: {Markup.Escape(model)}[/]");
 
-    string[] capabilities = ["completion", "tools", "vision"];
-    foreach (var capability in capabilities)
-    {
-      bool hasCapability = modelInfo.Capabilities!.Contains(capability);
-      AnsiConsole.MarkupLine(hasCapability
-        ? $"[white]✓ {Markup.Escape(capability)}[/]"
-        : $"[red]✗ {Markup.Escape(capability)}[/]");
-    }
+  //  string[] capabilities = ["completion", "tools", "vision"];
+  //  foreach (var capability in capabilities)
+  //  {
+  //    bool hasCapability = modelInfo.Capabilities!.Contains(capability);
+  //    AnsiConsole.MarkupLine(hasCapability
+  //      ? $"[white]✓ {Markup.Escape(capability)}[/]"
+  //      : $"[red]✗ {Markup.Escape(capability)}[/]");
+  //  }
 
-    return chatClient;
-  }
+  //  return chatClient;
+  //}
 
   /// <summary>
   /// Builds an Anthropic chat client for the configured default model.

@@ -235,7 +235,7 @@ public class WorkflowHelper(IWorkflowRenderer renderer)
             return;
 
           case WorkflowErrorEvent error:
-            FinalizeWorkflow($"❌ Workflow error: {FirstLine(error.Data)}", "Error");
+            FinalizeWorkflow($"❌ Workflow error: {FirstLine(error)} {error.Exception?.InnerException}", "Error");
             return;
         }
 

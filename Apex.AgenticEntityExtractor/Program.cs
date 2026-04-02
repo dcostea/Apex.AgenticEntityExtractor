@@ -3,8 +3,6 @@ using Apex.AgenticEntityExtractor.Clients;
 using Apex.AgenticEntityExtractor.OutputRenderers;
 using Apex.AgenticEntityExtractor.Middleware;
 using Apex.AgenticEntityExtractor.Workflows;
-using Microsoft.Agents.AI.DevUI;
-using Microsoft.Agents.AI.Hosting;
 using System.Text;
 using System.Text.Json.Serialization;
 
@@ -75,16 +73,16 @@ builder.Services.AddSingleton<WorkflowHelper>();
 ////});
 
 // DEVUI WORKFLOWS REGISTRATION
-builder.AddWorkflow("PipelineFromConcurrentWorkflows", (sp, name) =>
-{
-  var workflowBuilder = sp.GetRequiredService<IExtractorWorkflowBuilder>();
-  return workflowBuilder.BuildHighLevelPatterns(name);
-}).AddAsAIAgent();
-builder.AddWorkflow("FullCustomWorkflow", (sp, name) =>
-{
-  var workflowBuilder = sp.GetRequiredService<IExtractorWorkflowBuilder>();
-  return workflowBuilder.BuildLowLevelFullCustomWorkflow(name);
-}).AddAsAIAgent();
+////builder.AddWorkflow("PipelineFromConcurrentWorkflows", (sp, name) =>
+////{
+////  var workflowBuilder = sp.GetRequiredService<IExtractorWorkflowBuilder>();
+////  return workflowBuilder.BuildHighLevelPatterns(name);
+////}).AddAsAIAgent();
+////builder.AddWorkflow("FullCustomWorkflow", (sp, name) =>
+////{
+////  var workflowBuilder = sp.GetRequiredService<IExtractorWorkflowBuilder>();
+////  return workflowBuilder.BuildLowLevelFullCustomWorkflow(name);
+////}).AddAsAIAgent();
 
 // CONFIGURE CONTROLLERS, SWAGGER, AND DEVUI
 builder.Services.AddControllers().AddJsonOptions(options =>
@@ -95,13 +93,13 @@ builder.Services.AddControllers().AddJsonOptions(options =>
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-builder.AddOpenAIResponses();
-builder.AddOpenAIConversations();
+////builder.AddOpenAIResponses();
+////builder.AddOpenAIConversations();
 
 var app = builder.Build();
 
-app.MapOpenAIResponses();
-app.MapOpenAIConversations();
+////app.MapOpenAIResponses();
+////app.MapOpenAIConversations();
 
 app.MapControllers();
 
@@ -109,7 +107,7 @@ if (app.Environment.IsDevelopment())
 {
   app.UseSwagger();
   app.UseSwaggerUI();
-  app.MapDevUI();
+  ////app.MapDevUI();
 }
 
 app.UseHttpsRedirection();

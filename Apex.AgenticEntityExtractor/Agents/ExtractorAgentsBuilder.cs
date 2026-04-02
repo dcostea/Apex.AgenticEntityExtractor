@@ -38,7 +38,7 @@ public class ExtractorAgentsBuilder(IExtractorChatClientBuilder chatClientBuilde
         Instructions = LoadInstructions("ExtractorSoloAgent.md"),
         Reasoning = new ReasoningOptions
         {
-          Effort = ReasoningEffort.None
+          Effort = ReasoningEffort.Low
         },
       }
     });
@@ -63,7 +63,7 @@ public class ExtractorAgentsBuilder(IExtractorChatClientBuilder chatClientBuilde
         ToolMode = ChatToolMode.Auto,
         Reasoning = new ReasoningOptions
         {
-          Effort = ReasoningEffort.None
+          Effort = ReasoningEffort.Low
         },
       }
     })
@@ -91,7 +91,7 @@ public class ExtractorAgentsBuilder(IExtractorChatClientBuilder chatClientBuilde
         ToolMode = ChatToolMode.Auto,
         Reasoning = new ReasoningOptions
         {
-          Effort = ReasoningEffort.None
+          Effort = ReasoningEffort.Low
         },
       }
     })
@@ -117,7 +117,7 @@ public class ExtractorAgentsBuilder(IExtractorChatClientBuilder chatClientBuilde
         //Temperature = 0.1F,
         Reasoning = new ReasoningOptions
         {
-          Effort = ReasoningEffort.None
+          Effort = ReasoningEffort.Low
         },
       }
     });
@@ -147,7 +147,7 @@ public class ExtractorAgentsBuilder(IExtractorChatClientBuilder chatClientBuilde
         ToolMode = ChatToolMode.Auto,
         Reasoning = new ReasoningOptions
         {
-          Effort = ReasoningEffort.None
+          Effort = ReasoningEffort.Low
         },
       }
     })

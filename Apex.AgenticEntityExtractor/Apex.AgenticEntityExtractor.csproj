@@ -13,21 +13,23 @@
 	  <EmbeddedResource Remove="Extensions\**" />
 	  <None Remove="Extensions\**" />
 	</ItemGroup>
-
 	<ItemGroup>
-		<PackageReference Include="Microsoft.Agents.AI.OpenAI" Version="1.0.0-rc4" />
-		<PackageReference Include="Microsoft.Agents.AI.Workflows.Generators" Version="1.0.0-rc4">
+		<PackageReference Include="Microsoft.Agents.AI.OpenAI" Version="1.0.0-rc5" />
+    <PackageReference Include="Microsoft.Agents.AI.Workflows" Version="1.0.0-rc5" />
+      <!--<PackageReference Include="Microsoft.Agents.AI.Workflows.Generators" Version="1.0.0-rc5">
 		  <PrivateAssets>all</PrivateAssets>
 		  <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-		</PackageReference>
-		<PackageReference Include="Microsoft.Extensions.AI.AzureAIInference" Version="10.0.0-preview.1.25559.3" />
-		<PackageReference Include="Azure.AI.OpenAI" Version="2.8.0-beta.1" />
-		<PackageReference Include="Microsoft.Agents.AI.DevUI" Version="1.0.0-preview.260311.1" />
-		<PackageReference Include="OllamaSharp" Version="5.4.23" />
-    <PackageReference Include="Microsoft.Agents.AI.Anthropic" Version="1.0.0-rc4" />
-		<PackageReference Include="Spectre.Console" Version="0.54.1-alpha.0.72" />
-		<PackageReference Include="Spectre.Console.ImageSharp" Version="0.54.1-alpha.0.72" />
-		<PackageReference Include="Swashbuckle.AspNetCore" Version="10.1.5" />
+		</PackageReference>-->
+    <PackageReference Include="Microsoft.Agents.AI.Workflows.Generators" Version="1.0.0-rc5" />
+    <!--<PackageReference Include="Microsoft.Extensions.AI.AzureAIInference" Version="10.0.0-preview.1.25559.3" />-->
+		<PackageReference Include="Azure.AI.OpenAI" Version="2.9.0-beta.1" />
+		<!--<PackageReference Include="Microsoft.Agents.AI.DevUI" Version="1.0.0-preview.260311.1" />-->
+		<!--<PackageReference Include="Microsoft.Extensions.AI" />-->
+		<!--<PackageReference Include="OllamaSharp" Version="5.4.25" />-->
+    <PackageReference Include="Microsoft.Agents.AI.Anthropic" Version="1.0.0-rc5" />
+		<PackageReference Include="Spectre.Console" Version="0.54.1-alpha.0.86" />
+		<PackageReference Include="Spectre.Console.ImageSharp" Version="0.54.1-alpha.0.86" />
+		<PackageReference Include="Swashbuckle.AspNetCore" Version="10.1.7" />
 	</ItemGroup>
 
 	<ItemGroup>
