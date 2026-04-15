@@ -36,18 +36,30 @@ public partial class FanOutExecutor(string executorId)
 {
   private List<ChatMessage> _messages = [];
 
-  /// <summary>Accepts a single <see cref="ChatMessage"/> and replaces the buffer (when this executor is entry point, we get a solo message).</summary>
+  /// <summary>
+  /// Accepts a single <see cref="ChatMessage"/> and stores it as the sole message in the buffer.
+  /// Handles the case where the upstream agent sends one message (e.g. a structured-output response).
+  /// </summary>
   [MessageHandler]
   private void HandleMessage(ChatMessage message, IWorkflowContext context)
   {
     _messages = [message];
   }
 
-  /// <summary>Accepts a full message list and replaces the buffer (when this executor is entry point, we get a list of messages).</summary>
+  /// <summary>
+  /// Accepts a full message list and replaces the buffer.
+  /// Preserves the original User message (text + image) at the front so downstream agents
+  /// receive both the source context and the upstream agent's output — critical for agents
+  /// that need the original input (e.g. relationship agents need the source text to reason about relationships).
+  /// </summary>
   [MessageHandler]
   private void HandleMessages(List<ChatMessage> messages, IWorkflowContext context)
   {
-    _messages = messages;
+    // Keep the original User message(s) at the front so the full context flows downstream.
+    // Assistant messages (structured output) follow so agents see both source and prior stage output.
+    List<ChatMessage> userMessages = messages.Where(m => m.Role == ChatRole.User).ToList();
+    List<ChatMessage> otherMessages = messages.Where(m => m.Role != ChatRole.User).ToList();
+    _messages = [.. userMessages, .. otherMessages];
   }
 
   /// <summary>Broadcasts the buffered messages and a <see cref="TurnToken"/> to all downstream agents.</summary>
@@ -67,7 +79,7 @@ public partial class FanOutExecutor(string executorId)
     await context.SendMessageAsync(new TurnToken(emitEvents: token.EmitEvents is true), cancellationToken: cancellationToken);
   }
 
-  /// <summary>Asynchronously clears all messages from the collection, resetting it to an empty state.</summary>
+  /// <summary>Clears the message buffer between runs.</summary>
   public ValueTask ResetAsync()
   {
     _messages = [];

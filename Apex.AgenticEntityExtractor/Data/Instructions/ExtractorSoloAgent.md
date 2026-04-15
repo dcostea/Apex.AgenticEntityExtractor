@@ -58,8 +58,11 @@ Extract Entities JSON. E.g.:
 ```json
 {
   "entities": [
-    { "id": "e1", "type": "person", "value": "John Smith" },
-    { "id": "e2", "type": "organization", "value": "ACME Corp" }
+    { "id": "e1", "type": "person", "value": "John Doe" },
+    { "id": "e2", "type": "person", "value": "Jane Doe" },
+    { "id": "e3", "type": "organization", "value": "ABC Software" },
+    { "id": "e4", "type": "event", "value": "Summit" },
+    { "id": "e5", "type": "location", "value": "London" }
   ]
 }
 ```
@@ -67,13 +70,24 @@ Extract Relationships JSON. E.g.:
 ```json
 {
   "relationships": [
-    { "id": "r1", "source": "e1", "relationship": "works_for", "target": "e2" }
+    { "id": "r1", "source": "e1", "relationship": "participates_in", "target": "e4" },
+    { "id": "r2", "source": "e2", "relationship": "works_for", "target": "e3" },
+    { "id": "r3", "source": "e2", "relationship": "located_at", "target": "e5" }
   ]
 }
 ```
-Create a Mermaid JS graph using graph TB (top-to-bottom).​
+Create a Mermaid JS graph using graph TB (top-to-bottom).​ E.g.:
+```mermaid
+graph TD                                                                         
+e1[person: John Doe] -->|participates_in| e4[event: Summit]
+e2[person: Jane Doe] -->|works_for| e3[organization: ABC Software]
+e2 -->|located_at| e5[location: London]
+```
+
+## CONSTRAINTS
+Extract ONLY entities and relationships present in previous ONTOLOGIES.
 
 ## OUTPUT FORMAT
-- Mermaid node format: `id[type: Name]` (e.g., `e2[person: James Cooper]`)
-- Mermaid edge format: `id1 -->|relationship_type| id2` (e.g., `e2 -->|works_for| e4`)
+- Mermaid node format: `id1[type: Name]`
+- Mermaid edge format: `id1 -->|relationship_type| id2`
 - Respond with ONLY the mermaid diagram

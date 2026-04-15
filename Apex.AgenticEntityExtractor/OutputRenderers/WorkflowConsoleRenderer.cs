@@ -46,6 +46,20 @@ internal static class WorkflowConsoleRenderer
     AnsiConsole.Write(panel);
   }
 
+  internal static void PrintDotFlowPreview(string dotFlow)
+  {
+    if (string.IsNullOrWhiteSpace(dotFlow))
+      return;
+
+    var panel = new Panel($"[grey]{Markup.Escape(dotFlow)}[/]")
+      .Header("[mediumpurple1 bold]🔗 Workflow Graphviz DOT[/]")
+      .BorderColor(Color.MediumPurple1)
+      .Padding(1, 0)
+      .Expand();
+
+    AnsiConsole.Write(panel);
+  }
+
   internal static void PrintQuery(ChatMessage message)
   {
     var panel = new Panel($"[green dim]{Markup.Escape(message.Text)}[/]")

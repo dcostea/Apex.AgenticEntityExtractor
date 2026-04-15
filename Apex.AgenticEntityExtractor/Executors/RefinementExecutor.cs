@@ -1,4 +1,6 @@
-﻿using Apex.AgenticEntityExtractor.GroupChatManagers;
+﻿using Apex.AgenticEntityExtractor.Aggregators;
+using Apex.AgenticEntityExtractor.GroupChatManagers;
+using Apex.AgenticEntityExtractor.Models;
 using Apex.AgenticEntityExtractor.OutputRenderers;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
@@ -35,6 +37,7 @@ public partial class RefinementExecutor(string executorId, AIAgent builderAgent,
   : Executor(executorId, declareCrossRunShareable: true), IResettableExecutor
 {
   private const string ErrorsFound = "ERRORS FOUND";
+  private const string Rejected = "REJECTED";
 
   // ── State ────────────────────────────────────────────────────────────
 
@@ -43,10 +46,23 @@ public partial class RefinementExecutor(string executorId, AIAgent builderAgent,
   /// <summary>Entities/relationships JSON captured once from the upstream aggregator.</summary>
   private List<ChatMessage>? _baseContext;
 
-  /// <summary>Best valid Mermaid diagram seen so far — fallback when termination fires before approval.</summary>
-  private ChatMessage? _bestMermaidOutput;
+  /// <summary>Latest valid Mermaid diagram produced by the builder.</summary>
+  private ChatMessage? _latestMermaidOutput;
 
   // ── Message handlers ─────────────────────────────────────────────────
+
+  /// <summary>
+  /// Phase 0 (initial stage input): receives the typed extraction result from the upstream
+  /// <see cref="AggregatorExecutor"/> and converts it to the message format expected by the
+  /// group-chat logic. Sets <c>_baseContext</c> once so participants always receive full context.
+  /// </summary>
+  [MessageHandler]
+  private void HandleExtractionContext(ExtractionContext extractionContext, IWorkflowContext workflowContext)
+  {
+    List<ChatMessage> messages = ToContextMessages(extractionContext);
+    _baseContext ??= messages;
+    _messages = messages;
+  }
 
   /// <summary>Phase 1: buffer incoming messages from a participant or upstream stage.</summary>
   [MessageHandler]
@@ -60,29 +76,26 @@ public partial class RefinementExecutor(string executorId, AIAgent builderAgent,
   [MessageHandler]
   private async ValueTask HandleTurnAsync(TurnToken token, IWorkflowContext context, CancellationToken cancellationToken)
   {
-    // Guard: no messages buffered — spurious TurnToken
     if (_messages.Count == 0)
       return;
 
-    // Swap-and-clear to avoid reprocessing on subsequent TurnTokens
     List<ChatMessage> messages = _messages;
     _messages = [];
 
-    // Capture: snapshot the latest valid Mermaid candidate
+    // Capture the latest valid diagram from the builder
     if (TryGetLatestValidMermaid(messages) is ChatMessage currentMermaid)
-      _bestMermaidOutput = currentMermaid;
+      _latestMermaidOutput = currentMermaid;
 
-    // Terminate: check APPROVED keyword or iteration cap
+    // Terminate on APPROVED or max iterations — yield the latest diagram we have
     if (await manager.ShouldTerminateAsync(messages, cancellationToken))
     {
-      await YieldBestDiagramAsync(context, cancellationToken);
+      await YieldLatestDiagramAsync(context, cancellationToken);
       return;
     }
 
-    // Route: select next participant via round-robin
+    // Route to the next participant via round-robin (builder → reviewer → builder → …)
     AIAgent nextAgent = await manager.SelectNextAgentAsync(messages, cancellationToken);
 
-    // Resolve target executor and compose a clean conversation
     ExecutorBinding targetExecutor;
     if (nextAgent == builderAgent)
     {
@@ -97,7 +110,6 @@ public partial class RefinementExecutor(string executorId, AIAgent builderAgent,
 
     manager.CurrentIterationCount++;
 
-    // Targeted send: route to a specific executor (not all connected edges)
     await context.SendMessageAsync(messages, targetExecutor.Id, cancellationToken);
     await context.SendMessageAsync(new TurnToken(emitEvents: token.EmitEvents is true), targetExecutor.Id, cancellationToken);
   }
@@ -108,18 +120,18 @@ public partial class RefinementExecutor(string executorId, AIAgent builderAgent,
   {
     _messages = [];
     _baseContext = null;
-    _bestMermaidOutput = null;
+    _latestMermaidOutput = null;
     manager.CurrentIterationCount = 0;
     return default;
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────
 
-  /// <summary>Yields the best captured Mermaid diagram (or a fallback message) as final workflow output.</summary>
-  private async ValueTask YieldBestDiagramAsync(IWorkflowContext context, CancellationToken cancellationToken)
+  /// <summary>Yields the latest captured Mermaid diagram (or a fallback message) as final workflow output.</summary>
+  private async ValueTask YieldLatestDiagramAsync(IWorkflowContext context, CancellationToken cancellationToken)
   {
-    List<ChatMessage> output = _bestMermaidOutput is not null
-      ? [_bestMermaidOutput]
+    List<ChatMessage> output = _latestMermaidOutput is not null
+      ? [_latestMermaidOutput]
       : [new ChatMessage(ChatRole.Assistant, "No valid mermaid diagram produced before termination.")];
 
     try
@@ -132,29 +144,51 @@ public partial class RefinementExecutor(string executorId, AIAgent builderAgent,
     }
   }
 
-  /// <summary>Returns the latest assistant message with a valid Mermaid block (excluding error feedback).</summary>
+  /// <summary>
+  /// Converts the extraction context to labeled JSON messages using the shared <see cref="Aggregator.ToMessages"/> method.
+  /// </summary>
+  private static List<ChatMessage> ToContextMessages(ExtractionContext ctx) => Aggregator.ToMessages(ctx);
+
+  /// <summary>Returns the latest assistant message with a valid Mermaid block (excluding error feedback), extracting only the last block if multiple exist.</summary>
   private static ChatMessage? TryGetLatestValidMermaid(List<ChatMessage> messages)
   {
-    return messages.LastOrDefault(m =>
+    var candidate = messages.LastOrDefault(m =>
       m.Role == ChatRole.Assistant
       && !string.IsNullOrWhiteSpace(m.Text)
       && PayloadHelper.ContainsMermaidBlock(m.Text)
-      && !m.Text.Contains(ErrorsFound, StringComparison.OrdinalIgnoreCase));
+      && !m.Text.Contains(ErrorsFound, StringComparison.OrdinalIgnoreCase)
+      && !m.Text.Contains(Rejected, StringComparison.OrdinalIgnoreCase));
+
+    if (candidate is null)
+      return null;
+
+    // Small LLMs may produce multiple mermaid blocks in one response — keep only the last one.
+    string? lastBlock = PayloadHelper.ExtractLastMermaidBlock(candidate.Text!);
+    return lastBlock is not null
+      ? new ChatMessage(ChatRole.Assistant, lastBlock)
+      : candidate;
   }
 
   /// <summary>
-  /// Composes conversation for the builder: base context + reviewer feedback re-roled as User.
-  /// Strips prior diagrams to prevent parroting.
+  /// Composes conversation for the builder: base context + previous diagram + reviewer feedback.
+  /// Including the previous diagram lets the builder make targeted fixes instead of regenerating
+  /// from scratch each turn.
   /// </summary>
   private List<ChatMessage> PrepareMessagesForBuilder(List<ChatMessage> latestResponse)
   {
     List<ChatMessage> prepared = [.. _baseContext ?? []];
 
+    if (_latestMermaidOutput is not null)
+    {
+      prepared.Add(new ChatMessage(ChatRole.User, $"YOUR PREVIOUS DIAGRAM:\n{_latestMermaidOutput.Text}"));
+    }
+
     foreach (var m in latestResponse)
     {
       if (m.Role == ChatRole.Assistant
         && m.Text is { } text
-        && text.Contains(ErrorsFound, StringComparison.OrdinalIgnoreCase))
+        && (text.Contains(ErrorsFound, StringComparison.OrdinalIgnoreCase)
+          || text.Contains(Rejected, StringComparison.OrdinalIgnoreCase)))
       {
         prepared.Add(new ChatMessage(ChatRole.User, $"REVIEWER FEEDBACK:\n{text}"));
       }
@@ -165,7 +199,8 @@ public partial class RefinementExecutor(string executorId, AIAgent builderAgent,
 
   /// <summary>
   /// Composes conversation for the reviewer: base context + latest diagram presented as User input.
-  /// Strips prior reviews to prevent parroting.
+  /// Strips prior reviews to prevent parroting. Extracts only the last mermaid block if the
+  /// builder agent produced multiple blocks in one response.
   /// </summary>
   private List<ChatMessage> PrepareMessagesForReviewer(List<ChatMessage> latestResponse)
   {

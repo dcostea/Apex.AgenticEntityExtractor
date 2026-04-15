@@ -1,4 +1,5 @@
-﻿using Microsoft.Agents.AI;
+﻿using Apex.AgenticEntityExtractor.Models;
+using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
 using System.Collections.Concurrent;
@@ -30,6 +31,22 @@ public class WorkflowHelper(IWorkflowRenderer renderer)
   // ════════════════════════════════════════════════════════════════════════
   //  PUBLIC API
   // ════════════════════════════════════════════════════════════════════════
+
+  /// <summary>
+  /// Streams a single agent's response to the console with author tracking.
+  /// </summary>
+  public async Task<Entities> RenderAgentResponseAsync(AIAgent agent, ChatMessage message, string header)
+  {
+    renderer.PrintBanner(header);
+
+    var response = await agent.RunAsync<Entities>(message);
+
+    renderer.PrintQuery(message);
+    renderer.PrintInputImage(message);
+    renderer.EndStreaming();
+
+    return response.Result;
+  }
 
   /// <summary>
   /// Streams a single agent's response to the console with author tracking.
@@ -290,7 +307,7 @@ public class WorkflowHelper(IWorkflowRenderer renderer)
   /// <list type="bullet">
   ///   <item><c>EntitiesAgent_1_abc123…789abc</c> → <c>EntitiesAgent_1</c> (GUID stripped, name suffix preserved)</item>
   ///   <item><c>Batch/EntitiesAgent_1</c> → kept as-is (no GUID)</item>
-  ///   <item><c>MermaidDiagramAgent</c> → kept as-is (no GUID)</item>
+  ///   <item><c>MermaidBuilderAgent</c> → kept as-is (no GUID)</item>
   ///   <item><c>ede7d7f050d54183bd34169b3e26e265</c> → <c>26e265</c> (pure GUID fallback)</item>
   ///   <item><c>RelationshipAggregator</c> → kept as-is</item>
   /// </list>

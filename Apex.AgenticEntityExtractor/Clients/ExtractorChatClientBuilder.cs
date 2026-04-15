@@ -2,11 +2,10 @@
 using Apex.AgenticEntityExtractor.Enums;
 using Azure.AI.OpenAI;
 using Microsoft.Extensions.AI;
-//using OllamaSharp;
+using OllamaSharp;
 using OpenAI;
 using Spectre.Console;
 using System.ClientModel;
-using System.Collections.Concurrent;
 
 namespace Apex.AgenticEntityExtractor.Clients;
 
@@ -15,21 +14,23 @@ namespace Apex.AgenticEntityExtractor.Clients;
 /// </summary>
 public class ExtractorChatClientBuilder(IConfiguration configuration) : IExtractorChatClientBuilder
 {
-  private readonly ConcurrentDictionary<ChatProvider, Lazy<IChatClient>> _clients = new();
-
-  /// <inheritdoc/>
-  public IChatClient GetChatClient(ChatProvider provider) =>
-    _clients.GetOrAdd(provider, p => new Lazy<IChatClient>(() => BuildChatClient(p))).Value;
-
-  private IChatClient BuildChatClient(ChatProvider provider) => provider switch
+  public IChatClient BuildChatClient(ChatProvider provider) => provider switch
   {
-    //ChatProvider.Ollama => BuildOllamaChatClient(),
     ChatProvider.OpenAI => BuildOpenAIChatClient(),
     ChatProvider.Smaller_OpenAI => BuildSmallerOpenAIChatClient(),
     ChatProvider.AzureOpenAI => BuildAzureOpenAIChatClient(),
     ChatProvider.Anthropic => BuildAnthropicChatClient(),
     _ => throw new NotSupportedException($"Chat provider '{provider}' is not supported.")
   };
+
+  public IChatClient BuildOllamaChatClient(string modelName)
+  {
+    var ollamaServer = configuration["Ollama:Server"] ?? "http://localhost:11434";
+
+    AnsiConsole.MarkupLine($"\n[yellow]MODEL: {Markup.Escape(modelName)}[/]");
+
+    return new OllamaApiClient(new Uri(ollamaServer), modelName);
+  }
 
   /// <summary>
   /// Builds an Azure OpenAI chat client with the configured endpoint, API key, deployment, and network timeout.
@@ -118,7 +119,7 @@ public class ExtractorChatClientBuilder(IConfiguration configuration) : IExtract
   //  {
   //    bool hasCapability = modelInfo.Capabilities!.Contains(capability);
   //    AnsiConsole.MarkupLine(hasCapability
-  //      ? $"[white]✓ {Markup.Escape(capability)}[/]"
+  //      ? $"[white]✅ {Markup.Escape(capability)}[/]"
   //      : $"[red]✗ {Markup.Escape(capability)}[/]");
   //  }
 

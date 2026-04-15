@@ -60,7 +60,7 @@ public sealed partial class ParticipantExecutor(AIAgent agent, bool includeInput
 
     // Stream the agent's response, collecting updates (and optionally emitting live events)
     List<AgentResponseUpdate> updates = [];
-    await foreach (var update in agent.RunStreamingAsync(messages: messages, cancellationToken: cancellationToken))
+    await foreach (AgentResponseUpdate update in agent.RunStreamingAsync(messages: messages, cancellationToken: cancellationToken))
     {
       updates.Add(update);
       if (token.EmitEvents is true)
@@ -69,7 +69,10 @@ public sealed partial class ParticipantExecutor(AIAgent agent, bool includeInput
       }
     }
 
-    // Assemble output: optionally prepend input messages for full conversation context
+    // Assemble output: optionally prepend input messages for full conversation context.
+    // NOTE: structured-output agents encode their result in ChatMessage.Text as JSON.
+    // If this participant's agent is upgraded to structured output, extract the typed result
+    // from the response messages before forwarding rather than relying on text parsing downstream.
     List<ChatMessage> result = includeInputInOutput ? [.. messages] : [];
     result.AddRange(updates.ToAgentResponse().Messages);
 

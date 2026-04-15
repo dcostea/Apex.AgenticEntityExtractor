@@ -23,11 +23,11 @@ namespace Apex.AgenticEntityExtractor.Agents
     /// <summary>
     /// Builds the mermaid diagram generation agent.
     /// </summary>
-    AIAgent BuildMermaidDiagramAgent(ChatProvider? provider = null);
+    AIAgent BuildMermaidBuilderAgent(ChatProvider? provider = null);
 
     /// <summary>
     /// Builds the mermaid review/approval agent.
     /// </summary>
-    AIAgent BuildMermaidReviewerAgent(ChatProvider? provider = null);
+    AIAgent BuildMermaidRefinerAgent(ChatProvider? provider = null);
   }
 }

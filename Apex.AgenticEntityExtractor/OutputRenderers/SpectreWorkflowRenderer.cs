@@ -21,6 +21,9 @@ internal sealed class SpectreWorkflowRenderer : IWorkflowRenderer
   public void PrintMermaidFlowPreview(string mermaidFlow)
     => WorkflowConsoleRenderer.PrintMermaidFlowPreview(mermaidFlow);
 
+  public void PrintDotFlowPreview(string dotFlow)
+    => WorkflowConsoleRenderer.PrintDotFlowPreview(dotFlow);
+
   public void PrintPostDashboardLog(DashboardState state)
   {
     AnsiConsole.WriteLine();

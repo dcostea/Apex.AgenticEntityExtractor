@@ -9,22 +9,25 @@ namespace Apex.AgenticEntityExtractor.OutputRenderers;
 internal static class PayloadHelper
 {
   /// <summary>
-  /// Scans messages from latest to earliest and returns the first successfully parsed payload matching <paramref name="payloadKind"/>.
+  /// Scans messages from latest to earliest and returns the first message that deserializes
+  /// successfully as <typeparamref name="T"/>.
+  /// Suitable for structured-output agents where the response is guaranteed valid JSON —
+  /// no property-name marker is needed to locate the right message.
+  /// <para>
+  /// <see cref="NormalizeJsonPayload"/> is still applied defensively because some local models
+  /// (e.g. Ollama) may wrap structured output in markdown fences despite the response-format
+  /// constraint.
+  /// </para>
   /// </summary>
-  public static T? TryParseLatestStructuredPayload<T>(List<ChatMessage> messages, string payloadKind)
+  public static T? TryParseLatestStructuredPayload<T>(List<ChatMessage> messages)
   {
-    string marker = $"\"{payloadKind}\"";
-
     for (int i = messages.Count - 1; i >= 0; i--)
     {
-      var text = messages[i].Text;
+      string? text = messages[i].Text;
       if (string.IsNullOrWhiteSpace(text))
         continue;
 
       string normalized = NormalizeJsonPayload(text);
-      if (!normalized.Contains(marker, StringComparison.OrdinalIgnoreCase))
-        continue;
-
       try
       {
         if (JsonSerializer.Deserialize<T>(normalized) is { } parsed)
@@ -61,16 +64,28 @@ internal static class PayloadHelper
     => text.Contains("```mermaid", StringComparison.OrdinalIgnoreCase);
 
   /// <summary>
-  /// Finds the latest user-role JSON payload message containing the requested payload kind marker.
+  /// Extracts the last fenced ```mermaid``` block from the supplied text.
+  /// Returns <c>null</c> if no block is found.
   /// </summary>
-  public static ChatMessage? FindLatestJsonPayloadMessage(IList<List<ChatMessage>> aggregateResults, string payloadKind)
+  /// <remarks>
+  /// Small language models may produce multiple mermaid blocks in a single response.
+  /// This method ensures downstream consumers only see the final (most corrected) block.
+  /// </remarks>
+  public static string? ExtractLastMermaidBlock(string text)
   {
-    string marker = $"\"{payloadKind}\"";
-    return aggregateResults
-      .SelectMany(r => r)
-      .FirstOrDefault(m => m.Role == ChatRole.User &&
-                           m.Text is { } text &&
-                           text.Contains("```json", StringComparison.OrdinalIgnoreCase) &&
-                           text.Contains(marker, StringComparison.OrdinalIgnoreCase));
+    const string openFence = "```mermaid";
+    const string closeFence = "```";
+
+    int lastOpen = text.LastIndexOf(openFence, StringComparison.OrdinalIgnoreCase);
+    if (lastOpen < 0)
+      return null;
+
+    int contentStart = lastOpen + openFence.Length;
+    int closeIndex = text.IndexOf(closeFence, contentStart, StringComparison.OrdinalIgnoreCase);
+    if (closeIndex < 0)
+      return null;
+
+    string content = text[contentStart..closeIndex].Trim();
+    return $"```mermaid\n{content}\n```";
   }
 }

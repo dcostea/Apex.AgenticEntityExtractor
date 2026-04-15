@@ -13,7 +13,7 @@ The project solves a single problem (entity/relationship extraction → Mermaid 
 | # | Strategy | Orchestration Style | Key Concept |
 |---|----------|-------------------|-------------|
 | 0 | **Single Agent** | No workflow | One prompt does everything ("god" agent) |
-| 1 | **Orchestration Patterns (High-Level)** | `WorkflowBuilder` + `Workflow.AsAIAgent` | Fan-out/fan-in per stage, sub-workflows composed sequentially |
+| 1 | **Orchestration Patterns (High-Level)** | `WorkflowBuilder` + `Workflow.AsAIAgent` | Single entity agent; concurrent fan-out/fan-in for relationships; sub-workflows composed sequentially |
 | 2 | **Fully Custom Workflow (Low-Level)** | Single flat `WorkflowBuilder` graph with all stages | No sub-workflows, no `AsAIAgent` — everything in one graph |
 
 The progression from Strategy 0 → 2 mirrors a real-world evolution: start simple, decompose into specialised agents, then take full control of the execution graph.
@@ -29,7 +29,7 @@ Regardless of strategy, the logical flow is:
               │
               ▼
 ┌─────────────────────────────┐
-│  Stage 1: Entity Extraction │  3 agents in parallel, deduplicate
+│  Stage 1: Entity Extraction │  1 agent
 └─────────────┬───────────────┘
               │
               ▼
@@ -56,11 +56,11 @@ Entity and reviewer agents use **ontology tools** (loaded from JSON files and ca
 
 ```mermaid
 flowchart TD                                                            
-  ConcurrentEntityExtraction["ConcurrentEntityExtraction (Start)"];     
+  EntAgent["EntAgent (Start)"];                                          
   ConcurrentRelationshipExtraction["ConcurrentRelationshipExtraction"]; 
   MermaidDiagramAsGroupChat["MermaidDiagramAsGroupChat"];               
   OutputMessages["OutputMessages"];                                     
-  ConcurrentEntityExtraction --> ConcurrentRelationshipExtraction;      
+  EntAgent --> ConcurrentRelationshipExtraction;                        
   ConcurrentRelationshipExtraction --> MermaidDiagramAsGroupChat;       
   MermaidDiagramAsGroupChat --> OutputMessages;                         
 ```
@@ -69,54 +69,31 @@ flowchart TD
 
 ```mermaid
 flowchart TD                                                                                     
-  EntityFanOut["EntityFanOut (Start)"];                                                          
-  EntAgent_1_bbfd72ace7c143beaaf8e3fbf0e4ffb0["EntAgent_1_bbfd72ace7c143beaaf8e3fbf0e4ffb0"];    
-  EntAgent_2_1f5d7420b7c943789b5b35f2d6eb2076["EntAgent_2_1f5d7420b7c943789b5b35f2d6eb2076"];    
-  EntAgent_3_26d8bcb8594a49958a36dc26ada3e28c["EntAgent_3_26d8bcb8594a49958a36dc26ada3e28c"];    
-  Batch_EntAgent_1["Batch/EntAgent_1"];                                                          
-  Batch_EntAgent_2["Batch/EntAgent_2"];                                                          
-  Batch_EntAgent_3["Batch/EntAgent_3"];                                                          
-  EntityAggregator["EntityAggregator"];                                                          
+  EntAgent_1["EntAgent_1 (Start)"];                                                              
   RelationshipFanOut["RelationshipFanOut"];                                                      
-  RelAgent_1_f69f239982514c16b50a644326a2e187["RelAgent_1_f69f239982514c16b50a644326a2e187"];    
-  RelAgent_2_e5c4f74a7c264d388cff1f1a32941d3d["RelAgent_2_e5c4f74a7c264d388cff1f1a32941d3d"];    
-  RelAgent_3_6c4e92a3ede149bc9195b07f85b0abea["RelAgent_3_6c4e92a3ede149bc9195b07f85b0abea"];    
+  RelAgent_1["RelAgent_1"];                                                                      
+  RelAgent_2["RelAgent_2"];                                                                      
   Batch_RelAgent_1["Batch/RelAgent_1"];                                                          
   Batch_RelAgent_2["Batch/RelAgent_2"];                                                          
-  Batch_RelAgent_3["Batch/RelAgent_3"];                                                          
   RelationshipAggregator["RelationshipAggregator"];                                              
   MermaidRefiner["MermaidRefiner"];                                                              
-  MermaidDiagramAgent["MermaidDiagramAgent"];                                                    
-  MermaidReviewerAgent["MermaidReviewerAgent"];                                                  
-                                                                                                 
-  fan_in_EntityAggregator_3F0935F0((fan-in))                                                     
-  fan_in_RelationshipAggregator_FD7251F0((fan-in))                                               
-  Batch_EntAgent_1 --> fan_in_EntityAggregator_3F0935F0;                                         
-  Batch_EntAgent_2 --> fan_in_EntityAggregator_3F0935F0;                                         
-  Batch_EntAgent_3 --> fan_in_EntityAggregator_3F0935F0;                                         
-  fan_in_EntityAggregator_3F0935F0 --> EntityAggregator;                                         
-  Batch_RelAgent_1 --> fan_in_RelationshipAggregator_FD7251F0;                                   
-  Batch_RelAgent_2 --> fan_in_RelationshipAggregator_FD7251F0;                                   
-  Batch_RelAgent_3 --> fan_in_RelationshipAggregator_FD7251F0;                                   
-  fan_in_RelationshipAggregator_FD7251F0 --> RelationshipAggregator;                             
-  EntityFanOut -->|EntFanOutEdge| EntAgent_1_bbfd72ace7c143beaaf8e3fbf0e4ffb0;                   
-  EntityFanOut -->|EntFanOutEdge| EntAgent_2_1f5d7420b7c943789b5b35f2d6eb2076;                   
-  EntityFanOut -->|EntFanOutEdge| EntAgent_3_26d8bcb8594a49958a36dc26ada3e28c;                   
-  EntAgent_1_bbfd72ace7c143beaaf8e3fbf0e4ffb0 --> Batch_EntAgent_1;                              
-  EntAgent_2_1f5d7420b7c943789b5b35f2d6eb2076 --> Batch_EntAgent_2;                              
-  EntAgent_3_26d8bcb8594a49958a36dc26ada3e28c --> Batch_EntAgent_3;                              
-  EntityAggregator -->|EntHandoffEdge| RelationshipFanOut;                                       
-  RelationshipFanOut -->|RelFanOutEdge| RelAgent_1_f69f239982514c16b50a644326a2e187;             
-  RelationshipFanOut -->|RelFanOutEdge| RelAgent_2_e5c4f74a7c264d388cff1f1a32941d3d;             
-  RelationshipFanOut -->|RelFanOutEdge| RelAgent_3_6c4e92a3ede149bc9195b07f85b0abea;             
-  RelAgent_1_f69f239982514c16b50a644326a2e187 --> Batch_RelAgent_1;                              
-  RelAgent_2_e5c4f74a7c264d388cff1f1a32941d3d --> Batch_RelAgent_2;                              
-  RelAgent_3_6c4e92a3ede149bc9195b07f85b0abea --> Batch_RelAgent_3;                              
+  MermaidBuilderAgent["MermaidBuilderAgent"];                                                    
+  MermaidRefinerAgent["MermaidRefinerAgent"];                                                  
+
+  fan_in_RelationshipAggregator((fan-in))                                                        
+  Batch_RelAgent_1 --> fan_in_RelationshipAggregator;                                            
+  Batch_RelAgent_2 --> fan_in_RelationshipAggregator;                                            
+  fan_in_RelationshipAggregator --> RelationshipAggregator;                                      
+  EntAgent_1 -->|EntHandoffEdge| RelationshipFanOut;                                             
+  RelationshipFanOut -->|RelFanOutEdge| RelAgent_1;                                              
+  RelationshipFanOut -->|RelFanOutEdge| RelAgent_2;                                              
+  RelAgent_1 --> Batch_RelAgent_1;                                                               
+  RelAgent_2 --> Batch_RelAgent_2;                                                               
   RelationshipAggregator -->|RelHandoffEdge| MermaidRefiner;                                     
-  MermaidRefiner -->|Refine2Build| MermaidDiagramAgent;                                          
-  MermaidRefiner -->|Refine2Review| MermaidReviewerAgent;                                        
-  MermaidDiagramAgent -->|Build2Refine| MermaidRefiner;                                          
-  MermaidReviewerAgent -->|Review2Refine| MermaidRefiner;                                        
+  MermaidRefiner -->|Refine2Build| MermaidBuilderAgent;                                          
+  MermaidRefiner -->|Refine2Review| MermaidRefinerAgent;                                        
+  MermaidBuilderAgent -->|Build2Refine| MermaidRefiner;                                          
+  MermaidRefinerAgent -->|Review2Refine| MermaidRefiner;                                        
 ```
 
 ## Mermaid Diagram (sample)
@@ -240,10 +217,10 @@ A single "god" agent with one monolithic prompt handles entity extraction, relat
 
 ### Strategy 1 — High-Level Orchestration Patterns (`/extract/patterns`)
 
-Built by `BuildHighLevelPatterns`. Each stage is a concurrent workflow (3 agents in parallel) or a group chat, built with `AgentWorkflowBuilder` high-level helpers and wrapped via `Workflow.AsAIAgent`:
+Built by `BuildHighLevelPatterns`. Entity extraction uses a single agent; relationship extraction is a concurrent workflow (2 agents in parallel) built with `AgentWorkflowBuilder` high-level helpers and wrapped via `Workflow.AsAIAgent`:
 
 ```
-[BuildConcurrent → AsAIAgent] ──→ [BuildConcurrent → AsAIAgent] ──→ [GroupChat → AsAIAgent] ──→ Output
+[EntityAgent] ──→ [BuildConcurrent → AsAIAgent] ──→ [GroupChat → AsAIAgent] ──→ Output
 ```
 
 The outer workflow uses `BuildSequential` — it doesn't know (or care) that each "agent" is actually a full concurrent workflow internally.
@@ -253,13 +230,10 @@ The outer workflow uses `BuildSequential` — it doesn't know (or care) that eac
 Built by `BuildLowLevelFullCustomWorkflow`. All three stages live in a **single flat `WorkflowBuilder` graph** — no sub-workflows, no `AsAIAgent`.
 
 ```
-                     ┌──→ [Ent_1] ──→ [Batcher] ──┐
-  [Entity Fan-Out] ──┼──→ [Ent_2] ──→ [Batcher] ──┼──→ [Entity Aggregator]
-                     └──→ [Ent_3] ──→ [Batcher] ──┘          │
-                     ┌──→ [Rel_1] ──→ [Batcher] ──┐          │
-  [Rel Fan-Out] ◄────┼──→ [Rel_2] ──→ [Batcher] ──┼──→ [Rel Aggregator]
-                     └──→ [Rel_3] ──→ [Batcher] ──┘          │
-                                                             ▼
+                              ┌──→ [Rel_1] ──→ [Batcher] ──┐
+  [Entity Agent] ──→ [Rel Fan-Out] ──┤                         ├──→ [Rel Aggregator]
+                              └──→ [Rel_2] ──→ [Batcher] ──┘          │
+                                                                       ▼
               [RefinementExecutor] ←──→ [Builder / Reviewer] ──→ Output
 ```
 

@@ -7,6 +7,7 @@ using System.Text;
 using System.Text.Json.Serialization;
 using Microsoft.Agents.AI.DevUI;
 using Microsoft.Agents.AI.Hosting;
+using Apex.AgenticEntityExtractor.Enums;
 
 Console.OutputEncoding = Encoding.UTF8;
 
@@ -33,47 +34,38 @@ builder.AddDevUI();
 builder.AddAIAgent("ExtractorSoloAgent", (sp, _) =>
 {
   var agentBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
-  return agentBuilder.BuildSoloAgent();
+  var configuration = sp.GetRequiredService<IConfiguration>();
+  return agentBuilder.BuildSoloAgent(configuration.GetValue<ChatProvider>("Provider"));
 });
 builder.AddAIAgent("EntAgent_1", (sp, _) =>
 {
   var agentBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
-  return agentBuilder.BuildEntitiesAgent("1");
-});
-builder.AddAIAgent("EntAgent_2", (sp, _) =>
-{
-  var agentBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
-  return agentBuilder.BuildEntitiesAgent("2");
-});
-builder.AddAIAgent("EntAgent_3", (sp, _) =>
-{
-  var agentBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
-  return agentBuilder.BuildEntitiesAgent("3");
+  var configuration = sp.GetRequiredService<IConfiguration>();
+  return agentBuilder.BuildEntitiesAgent("1", configuration.GetValue<ChatProvider>("Provider"));
 });
 builder.AddAIAgent("RelAgent_1", (sp, _) =>
 {
   var agentBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
-  return agentBuilder.BuildRelationshipsAgent("1");
+  var configuration = sp.GetRequiredService<IConfiguration>();
+  return agentBuilder.BuildRelationshipsAgent("1", configuration.GetValue<ChatProvider>("Provider"));
 });
 builder.AddAIAgent("RelAgent_2", (sp, _) =>
 {
   var agentBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
-  return agentBuilder.BuildRelationshipsAgent("2");
+  var configuration = sp.GetRequiredService<IConfiguration>();
+  return agentBuilder.BuildRelationshipsAgent("2", configuration.GetValue<ChatProvider>("Provider"));
 });
-builder.AddAIAgent("RelAgent_3", (sp, _) =>
+builder.AddAIAgent("MermaidBuilderAgent", (sp, _) =>
 {
   var agentBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
-  return agentBuilder.BuildRelationshipsAgent("3");
+  var configuration = sp.GetRequiredService<IConfiguration>();
+  return agentBuilder.BuildMermaidBuilderAgent(configuration.GetValue<ChatProvider>("Provider"));
 });
-builder.AddAIAgent("MermaidDiagramAgent", (sp, _) =>
+builder.AddAIAgent("MermaidRefinerAgent", (sp, _) =>
 {
   var agentBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
-  return agentBuilder.BuildMermaidDiagramAgent();
-});
-builder.AddAIAgent("MermaidReviewerAgent", (sp, _) =>
-{
-  var agentBuilder = sp.GetRequiredService<IExtractorAgentsBuilder>();
-  return agentBuilder.BuildMermaidReviewerAgent();
+  var configuration = sp.GetRequiredService<IConfiguration>();
+  return agentBuilder.BuildMermaidRefinerAgent(configuration.GetValue<ChatProvider>("Provider"));
 });
 
 // DEVUI WORKFLOWS REGISTRATION

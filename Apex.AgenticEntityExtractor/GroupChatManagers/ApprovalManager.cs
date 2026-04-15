@@ -46,12 +46,12 @@ public class ApprovalManager(IReadOnlyList<AIAgent> agents, Func<RoundRobinGroup
   }
 
   private const string Approved = "APPROVED";
-  private const string Errors = "ERRORS";
+  private const string Rejected = "REJECTED";
 
   /// <summary>
   /// Creates a termination function that ends the group chat when:
   /// <list type="bullet">
-  ///   <item>The last message contains <c>"APPROVED"</c> (without <c>"ERRORS"</c>) — the reviewer
+  ///   <item>The last message contains <c>"APPROVED"</c> (without <c>"REJECTED"</c>) — the reviewer
   ///         accepted the diagram.</item>
   ///   <item>The iteration count reaches the maximum — forces termination as a safety net.</item>
   /// </list>
@@ -76,7 +76,7 @@ public class ApprovalManager(IReadOnlyList<AIAgent> agents, Func<RoundRobinGroup
 
       if (currentIterationCount >= maxIteration)
       {
-        WorkflowHelper.EnqueueReviewStatusEvent($"⚠ Max round-robin turns reached - Stopping review loop without approval (turn {currentIterationCount}/{maxIteration})");
+        WorkflowHelper.EnqueueReviewStatusEvent($"⚠ Max turns reached - Stopping review loop without approval (turn {currentIterationCount}/{maxIteration})");
         return ValueTask.FromResult(true);
       }
 
@@ -88,9 +88,9 @@ public class ApprovalManager(IReadOnlyList<AIAgent> agents, Func<RoundRobinGroup
         return ValueTask.FromResult(true);
       }
 
-      if (lastText.Contains(Errors, StringComparison.OrdinalIgnoreCase))
+      if (lastText.Contains(Rejected, StringComparison.OrdinalIgnoreCase))
       {
-        WorkflowHelper.EnqueueReviewStatusEvent($"✓ Reviewer requested changes - Retrying (turn {currentIterationCount}/{maxIteration})");
+        WorkflowHelper.EnqueueReviewStatusEvent($"🔄 Reviewer requested changes - Retrying (turn {currentIterationCount}/{maxIteration})");
       }
 
       return ValueTask.FromResult(false);
@@ -108,6 +108,6 @@ public class ApprovalManager(IReadOnlyList<AIAgent> agents, Func<RoundRobinGroup
   private static bool IsApproved(string text)
   {
     return text.Contains(Approved, StringComparison.OrdinalIgnoreCase)
-      && !text.Contains(Errors, StringComparison.OrdinalIgnoreCase);
+      && !text.Contains(Rejected, StringComparison.OrdinalIgnoreCase);
   }
 }

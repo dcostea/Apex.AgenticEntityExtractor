@@ -16,7 +16,7 @@ namespace Apex.AgenticEntityExtractor.Controllers;
 /// </summary>
 [ApiController]
 [Route("[controller]")]
-public class ExtractorController(IExtractorWorkflowBuilder extractorWorkflowBuilder, IExtractorAgentsBuilder extractorAgentsBuilder, WorkflowHelper workflowHelper, IWorkflowRenderer workflowRenderer) : ControllerBase
+public class ExtractorController(IExtractorWorkflowBuilder extractorWorkflowBuilder, IExtractorAgentsBuilder extractorAgentsBuilder, WorkflowHelper workflowHelper, IWorkflowRenderer workflowRenderer, IConfiguration configuration) : ControllerBase
 {
   /// <summary>
   /// Runs the solo-agent extraction path.
@@ -30,10 +30,33 @@ public class ExtractorController(IExtractorWorkflowBuilder extractorWorkflowBuil
       Microsoft.Extensions.AI.ChatMessage userMessage = await MessageHelper.BuildUserMessageAsync(request);
 
       // Build the single extractor agent.
-      AIAgent extractorAgent = extractorAgentsBuilder.BuildSoloAgent(ChatProvider.Smaller_OpenAI);
+      AIAgent extractorAgent = extractorAgentsBuilder.BuildSoloAgent(configuration.GetValue<ChatProvider>("Provider"));
 
       // Run and render streamed output.
       string? result = await workflowHelper.RenderAgentResponseStreamAsync(extractorAgent, userMessage, "USING SOLO AGENT");
+
+      return Ok(result);
+    }
+    catch (Exception ex)
+    {
+      return BadRequest(ex.Message);
+    }
+  }
+
+  /// <summary>
+  /// Runs the entity extraction agent only, using the entities ontology tool.
+  /// </summary>
+  [HttpPost("/extract/entities")]
+  [Consumes("multipart/form-data")]
+  public async Task<IActionResult> RunEntitiesAgentAsync([FromForm] ExtractionRequest request)
+  {
+    try
+    {
+      ChatMessage userMessage = await MessageHelper.BuildUserMessageAsync(request);
+
+      AIAgent entitiesAgent = extractorAgentsBuilder.BuildEntitiesAgent(provider: configuration.GetValue<ChatProvider>("Provider"));
+
+      Entities result = await workflowHelper.RenderAgentResponseAsync(entitiesAgent, userMessage, "USING ENTITIES AGENT");
 
       return Ok(result);
     }
@@ -66,6 +89,10 @@ public class ExtractorController(IExtractorWorkflowBuilder extractorWorkflowBuil
 
       var mermaidFlow = workflow.ToMermaidString();
       workflowRenderer.PrintMermaidFlowPreview(mermaidFlow);
+
+      var dotFlow = WorkflowVisualizer.ToDotString(workflow);
+      workflowRenderer.PrintDotFlowPreview(dotFlow);
+
       workflowRenderer.PrintQuery(userMessage);
       workflowRenderer.PrintInputImage(userMessage);
 
@@ -101,6 +128,10 @@ public class ExtractorController(IExtractorWorkflowBuilder extractorWorkflowBuil
 
       var mermaidFlow = workflow.ToMermaidString();
       workflowRenderer.PrintMermaidFlowPreview(mermaidFlow);
+
+      var dotFlow = WorkflowVisualizer.ToDotString(workflow);
+      workflowRenderer.PrintDotFlowPreview(dotFlow);
+
       workflowRenderer.PrintQuery(userMessage);
       workflowRenderer.PrintInputImage(userMessage);
 

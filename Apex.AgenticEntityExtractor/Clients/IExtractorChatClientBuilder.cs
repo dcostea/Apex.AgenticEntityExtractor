@@ -5,9 +5,6 @@ namespace Apex.AgenticEntityExtractor.Clients;
 
 public interface IExtractorChatClientBuilder
 {
-  /// <summary>
-  /// Returns a cached <see cref="IChatClient"/> for the given provider.
-  /// Clients are created lazily on first access and reused thereafter.
-  /// </summary>
-  IChatClient GetChatClient(ChatProvider provider);
+  IChatClient BuildChatClient(ChatProvider provider);
+  IChatClient BuildOllamaChatClient(string modelName);
 }
