@@ -1,0 +1,46 @@
+[
+  {
+    "name": "works_for",
+    "description": "Shows that a person is connected to or employed by an organization or group, either formally or informally.",
+    "examples": [
+      "job title",
+      "volunteer",
+      "team member"
+    ]
+  },
+  {
+    "name": "located_at",
+    "description": "Links an entity (person, organization, or event) to its physical or geographical location described in the text.",
+    "examples": [
+      "person in office",
+      "company in city",
+      "event at venue"
+    ]
+  },
+  {
+    "name": "occurs_at",
+    "description": "Links an event to its associated time, indicating when it happens.",
+    "examples": [
+      "meeting at 2 PM",
+      "festival in July",
+      "birthday on Monday"
+    ]
+  },
+  {
+    "name": "participates_in",
+    "description": "Indicates that a person takes part in an event.",
+    "examples": [
+      "attending",
+      "speaking",
+      "organizing"
+    ]
+  },
+  {
+    "name": "part_of",
+    "description": "Shows that an entity is a component or member of a larger entity of the same type.",
+    "examples": [
+      "department part of company",
+      "session part of conference"
+    ]
+  }
+]

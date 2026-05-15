@@ -1,0 +1,17 @@
+digraph KnowledgeGraph {
+  rankdir=TB
+  node [shape=box style=filled fontname="Helvetica" fontsize=11]
+  edge [fontname="Helvetica" fontsize=10]
+
+  e1 [label="person: Daniel" fillcolor=lightyellow]
+  e2 [label="location: London" fillcolor=peachpuff]
+  e3 [label="temporal: today" fillcolor=lavender]
+  e4 [label="event: SDD Conf" fillcolor=lightgreen]
+  e5 [label="person: Nick Payne" fillcolor=lightyellow]
+
+  e1 -> e2 [label="located_at"]
+  e4 -> e2 [label="located_at"]
+  e4 -> e3 [label="occurs_at"]
+  e1 -> e4 [label="participates_in"]
+  e5 -> e4 [label="participates_in"]
+}

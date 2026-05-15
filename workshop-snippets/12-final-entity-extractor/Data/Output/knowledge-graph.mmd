@@ -1,0 +1,12 @@
+graph TD
+  e1["person: Daniel"]
+  e2["location: London"]
+  e3["temporal: today"]
+  e4["event: SDD Conf"]
+  e5["person: Nick Payne"]
+
+  e1 -->|"located_at"| e2
+  e4 -->|"located_at"| e2
+  e4 -->|"occurs_at"| e3
+  e1 -->|"participates_in"| e4
+  e5 -->|"participates_in"| e4

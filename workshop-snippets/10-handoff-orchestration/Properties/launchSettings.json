@@ -1,0 +1,13 @@
+{
+  "profiles": {
+    "Step10.HandoffOrchestration": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "launchUrl": "devui",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:51355;http://localhost:51356"
+    }
+  }
+}

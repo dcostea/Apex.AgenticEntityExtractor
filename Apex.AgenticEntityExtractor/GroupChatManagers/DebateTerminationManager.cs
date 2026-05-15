@@ -1,8 +1,11 @@
-﻿using Apex.AgenticEntityExtractor.Executors;
+﻿using Apex.AgenticEntityExtractor.Enums;
+using Apex.AgenticEntityExtractor.Executors;
+using Apex.AgenticEntityExtractor.Models;
 using Apex.AgenticEntityExtractor.OutputRenderers;
 using Microsoft.Agents.AI;
 using Microsoft.Agents.AI.Workflows;
 using Microsoft.Extensions.AI;
+using System.Text.Json;
 
 namespace Apex.AgenticEntityExtractor.GroupChatManagers;
 
@@ -13,17 +16,17 @@ namespace Apex.AgenticEntityExtractor.GroupChatManagers;
 /// <c>SelectNextAgentAsync</c>, <c>UpdateHistoryAsync</c>) as <c>protected internal</c>,
 /// which means they can only be called from within the framework assembly.
 ///
-/// Since our custom <see cref="RefinementExecutor"/> lives outside the framework, this adapter
-/// exposes those methods publicly via the <c>new</c> keyword (method hiding), delegating
-/// each call to the <c>base</c> implementation.
+/// Since our custom <see cref="GroupChatOrchestratorExecutor"/> lives outside the framework,
+/// this adapter exposes those methods publicly via the <c>new</c> keyword (method hiding),
+/// delegating each call to the <c>base</c> implementation.
 ///
 /// <b>Why <see cref="CurrentIterationCount"/>?</b>
 /// The base <c>IterationCount</c> property has an <c>internal set</c> accessor — only the
-/// framework's own <c>GroupChatHost</c> can increment it. Since <see cref="RefinementExecutor"/>
+/// framework's own <c>GroupChatHost</c> can increment it. Since <see cref="GroupChatOrchestratorExecutor"/>
 /// is a custom host, we maintain our own counter that the host increments and the termination
 /// function reads.
 /// </summary>
-public class ApprovalManager(IReadOnlyList<AIAgent> agents, Func<RoundRobinGroupChatManager, IEnumerable<ChatMessage>, CancellationToken, ValueTask<bool>> terminationFunction)
+public class DebateTerminationManager(IReadOnlyList<AIAgent> agents, Func<RoundRobinGroupChatManager, IEnumerable<ChatMessage>, CancellationToken, ValueTask<bool>> terminationFunction)
   : RoundRobinGroupChatManager(agents, shouldTerminateFunc: terminationFunction)
 {
   /// <summary>Tracks iterations independently since base <c>IterationCount</c> has <c>internal set</c>.</summary>
@@ -45,28 +48,44 @@ public class ApprovalManager(IReadOnlyList<AIAgent> agents, Func<RoundRobinGroup
     return base.SelectNextAgentAsync(history, cancellationToken);
   }
 
-  private const string Approved = "APPROVED";
-  private const string Rejected = "REJECTED";
+  /// <summary>
+  /// Parses the structured JSON response and extracts the <see cref="DebateVerdict"/>.
+  /// With <c>ResponseFormat = ForJsonSchema&lt;DebateResponse&gt;()</c>, the LLM output is
+  /// guaranteed valid JSON — no text scanning or keyword detection needed.
+  /// Falls back to <see cref="DebateVerdict.None"/> if parsing fails (defensive).
+  /// </summary>
+  public static DebateVerdict ClassifyVerdict(string text)
+  {
+    try
+    {
+      DebateResponse? response = JsonSerializer.Deserialize<DebateResponse>(
+        PayloadHelper.NormalizeJsonPayload(text));
+      return response?.Verdict ?? DebateVerdict.None;
+    }
+    catch (JsonException)
+    {
+      return DebateVerdict.None;
+    }
+  }
 
   /// <summary>
   /// Creates a termination function that ends the group chat when:
   /// <list type="bullet">
-  ///   <item>The last message contains <c>"APPROVED"</c> (without <c>"REJECTED"</c>) — the reviewer
-  ///         accepted the diagram.</item>
+  ///   <item>The last message is classified as <see cref="DebateVerdict.Approved"/>.</item>
   ///   <item>The iteration count reaches the maximum — forces termination as a safety net.</item>
   /// </list>
   ///
   /// This function works with both orchestration paths:
   /// <list type="bullet">
   ///   <item><b>Custom orchestration:</b> reads <see cref="CurrentIterationCount"/>
-  ///         (incremented by our <see cref="RefinementExecutor"/>).</item>
+  ///         (incremented by our <see cref="GroupChatOrchestratorExecutor"/>).</item>
   ///   <item><b>High-level workflow:</b> reads the base <c>IterationCount</c> property
   ///         (incremented by the framework's internal host).</item>
   /// </list>
   /// Status messages are recorded via <see cref="WorkflowHelper.EnqueueReviewStatusEvent(string)"/>
   /// so they appear in the dashboard review-status panel.
   /// </summary>
-  public static Func<RoundRobinGroupChatManager, IEnumerable<ChatMessage>, CancellationToken, ValueTask<bool>> ApprovedTermination()
+  public static Func<RoundRobinGroupChatManager, IEnumerable<ChatMessage>, CancellationToken, ValueTask<bool>> VerdictTermination()
   {
     return (chatManager, messages, _) =>
     {
@@ -76,21 +95,21 @@ public class ApprovalManager(IReadOnlyList<AIAgent> agents, Func<RoundRobinGroup
 
       if (currentIterationCount >= maxIteration)
       {
-        WorkflowHelper.EnqueueReviewStatusEvent($"⚠ Max turns reached - Stopping review loop without approval (turn {currentIterationCount}/{maxIteration})");
+        WorkflowHelper.EnqueueReviewStatusEvent($"⚠ Max turns reached - Stopping debate loop without approval (turn {currentIterationCount}/{maxIteration})");
         return ValueTask.FromResult(true);
       }
 
-      bool isApproved = IsApproved(lastText);
+      DebateVerdict verdict = ClassifyVerdict(lastText);
 
-      if (isApproved)
+      if (verdict is DebateVerdict.Approved)
       {
-        WorkflowHelper.EnqueueReviewStatusEvent($"✅ Diagram APPROVED - Exiting review loop (turn {currentIterationCount}/{maxIteration})");
+        WorkflowHelper.EnqueueReviewStatusEvent($"✅ {DebateVerdict.Approved} - Exiting debate loop (turn {currentIterationCount}/{maxIteration})");
         return ValueTask.FromResult(true);
       }
 
-      if (lastText.Contains(Rejected, StringComparison.OrdinalIgnoreCase))
+      if (verdict is DebateVerdict.Rejected)
       {
-        WorkflowHelper.EnqueueReviewStatusEvent($"🔄 Reviewer requested changes - Retrying (turn {currentIterationCount}/{maxIteration})");
+        WorkflowHelper.EnqueueReviewStatusEvent($"🔄 {DebateVerdict.Rejected} - Continuing debate (turn {currentIterationCount}/{maxIteration})");
       }
 
       return ValueTask.FromResult(false);
@@ -99,15 +118,9 @@ public class ApprovalManager(IReadOnlyList<AIAgent> agents, Func<RoundRobinGroup
 
   private static int GetCurrentIterationCount(RoundRobinGroupChatManager chatManager)
   {
-    if (chatManager is ApprovalManager approvalManager)
-      return approvalManager.CurrentIterationCount;
+    if (chatManager is DebateTerminationManager manager)
+      return manager.CurrentIterationCount;
 
     return chatManager.IterationCount;
-  }
-
-  private static bool IsApproved(string text)
-  {
-    return text.Contains(Approved, StringComparison.OrdinalIgnoreCase)
-      && !text.Contains(Rejected, StringComparison.OrdinalIgnoreCase);
   }
 }

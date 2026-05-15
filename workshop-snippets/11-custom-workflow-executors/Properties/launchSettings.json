@@ -1,0 +1,13 @@
+{
+  "profiles": {
+    "Step11.CustomWorkflowExecutors": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "launchUrl": "devui",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:51359;http://localhost:51360"
+    }
+  }
+}

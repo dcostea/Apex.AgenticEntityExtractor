@@ -1,3 +1,17 @@
 <Solution>
+  <Folder Name="/Progressive Workshop Projects/">
+    <Project Path="workshop-snippets/01-minimal-agent-in-webapi/Step01.MinimalAgentInWebApi.csproj" />
+    <Project Path="workshop-snippets/02-add-devui/Step02.AddDevUI.csproj" />
+    <Project Path="workshop-snippets/03-add-tool/Step03.AddTool.csproj" />
+    <Project Path="workshop-snippets/04-switch-provider/Step04.SwitchProvider.csproj" />
+    <Project Path="workshop-snippets/05-add-middleware/Step05.AddMiddleware.csproj" />
+    <Project Path="workshop-snippets/06-add-observability-aspire/Step06.ObservabilityAspire.csproj" />
+    <Project Path="workshop-snippets/07-add-evaluation/Step07.AddEvaluation.csproj" />
+    <Project Path="workshop-snippets/08-sequential-orchestration/Step08.SequentialOrchestration.csproj" />
+    <Project Path="workshop-snippets/09-concurrent-orchestration/Step09.ConcurrentOrchestration.csproj" />
+    <Project Path="workshop-snippets/10-handoff-orchestration/Step10.HandoffOrchestration.csproj" />
+    <Project Path="workshop-snippets/11-custom-workflow-executors/Step11.CustomWorkflowExecutors.csproj" />
+    <Project Path="workshop-snippets/12-final-entity-extractor/Step12.FinalEntityExtractor.csproj" />
+  </Folder>
   <Project Path="Apex.AgenticEntityExtractor/Apex.AgenticEntityExtractor.csproj" />
 </Solution>

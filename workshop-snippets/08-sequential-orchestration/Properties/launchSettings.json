@@ -1,0 +1,13 @@
+{
+  "profiles": {
+    "Step08.SequentialOrchestration": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "launchUrl": "devui",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:51371;http://localhost:51372"
+    }
+  }
+}

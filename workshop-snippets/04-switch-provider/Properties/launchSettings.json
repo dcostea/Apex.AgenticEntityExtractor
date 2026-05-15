@@ -1,0 +1,13 @@
+{
+  "profiles": {
+    "Step04.SwitchProvider": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "launchUrl": "swagger",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:51369;http://localhost:51370"
+    }
+  }
+}

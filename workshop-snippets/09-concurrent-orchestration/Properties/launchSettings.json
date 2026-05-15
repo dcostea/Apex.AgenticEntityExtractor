@@ -1,0 +1,13 @@
+{
+  "profiles": {
+    "Step09.ConcurrentOrchestration": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "launchUrl": "devui",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:51367;http://localhost:51368"
+    }
+  }
+}

@@ -1,0 +1,29 @@
+graph TD
+  e1["event: Amsterdam Tech Conference 2025"]
+  e2["person: Elena"]
+  e3["event: Amsterdam Tech Conference"]
+  e4["temporal: last Thursday"]
+  e5["temporal: November"]
+  e6["person: Dr. Michael Anders"]
+  e7["temporal: next week's"]
+  e8["event: sprint review"]
+  e9["person: James Cooper"]
+  e10["organization: Innovatech Solutions"]
+  e11["location: The Hague"]
+  e12["temporal: 1 Oct 2025"]
+  e13["person: Daniel Costea"]
+  e14["person: Sarah Blunt"]
+  e15["location: Amsterdam Convention Center"]
+  e16["location: Amsterdam"]
+
+  e9 -->|"participates_in"| e3
+  e9 -->|"works_for"| e10
+  e10 -->|"located_at"| e11
+  e3 -->|"occurs_at"| e4
+  e6 -->|"participates_in"| e3
+  e8 -->|"occurs_at"| e7
+  e1 -->|"occurs_at"| e12
+  e3 -->|"located_at"| e16
+  e3 -->|"located_at"| e15
+  e13 -->|"participates_in"| e3
+  e14 -->|"participates_in"| e3

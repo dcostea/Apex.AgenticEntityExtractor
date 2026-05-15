@@ -1,0 +1,13 @@
+{
+  "profiles": {
+    "Step01.MinimalAgentInWebApi": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "launchUrl": "swagger",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:51361;http://localhost:51362"
+    }
+  }
+}

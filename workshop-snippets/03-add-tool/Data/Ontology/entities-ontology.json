@@ -1,0 +1,50 @@
+[
+  {
+    "name": "person",
+    "description": "A specific human individual mentioned or implied in the content. Includes names and references to people.",
+    "examples": [
+      "Anna Kowalski",
+      "Jim",
+      "Dr. Einstein"
+    ]
+  },
+  {
+    "name": "organization",
+    "description": "Any named company, institution, group, or team. Includes official names.",
+    "examples": [
+      "CloudCorp",
+      "United Nations",
+      "Black Ducks LTD"
+    ]
+  },
+  {
+    "name": "location",
+    "description": "Any physical or geographical place described, such as cities, countries, addresses, or rooms.",
+    "examples": [
+      "Rome",
+      "Eiffel Tower",
+      "Conference Room 2A"
+    ]
+  },
+  {
+    "name": "temporal",
+    "description": "Any mention of time, such as a specific date, hour, season, period, or phrase about time.",
+    "examples": [
+      "2025-05-27",
+      "14:30",
+      "Tuesday",
+      "January"
+    ]
+  },
+  {
+    "name": "event",
+    "description": "Any occurrence or activity referenced, including scheduled or historical events.",
+    "examples": [
+      "wedding",
+      "company meeting",
+      "Moon landing",
+      "earthquake",
+      "Easter"
+    ]
+  }
+]
