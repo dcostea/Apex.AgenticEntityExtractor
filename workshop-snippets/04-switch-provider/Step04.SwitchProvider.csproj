@@ -9,11 +9,11 @@
 
   <ItemGroup>
     <PackageReference Include="Azure.AI.OpenAI" Version="2.9.0-beta.1" />
-    <PackageReference Include="Microsoft.Agents.AI.DevUI" Version="1.5.0-preview.260507.1" />
-    <PackageReference Include="Microsoft.Agents.AI.Hosting" Version="1.5.0-preview.260507.1" />
-    <PackageReference Include="Microsoft.Agents.AI.OpenAI" Version="1.5.0" />
-    <PackageReference Include="OllamaSharp" Version="5.4.25" />
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="10.1.7" />
+    <PackageReference Include="Microsoft.Agents.AI.DevUI" Version="1.22.0-preview.260918.1" />
+    <PackageReference Include="Microsoft.Agents.AI.Hosting" Version="1.22.0-preview.260918.1" />
+    <PackageReference Include="Microsoft.Agents.AI.OpenAI" Version="1.22.0" />
+    <PackageReference Include="OllamaSharp" Version="5.4.30" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.3" />
   </ItemGroup>
 
   <ItemGroup>

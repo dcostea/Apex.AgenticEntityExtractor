@@ -18,15 +18,15 @@
 	  <None Remove="Extensions\**" />
 	</ItemGroup>
 	<ItemGroup>
-		<PackageReference Include="Microsoft.Agents.AI.DevUI" Version="1.6.0-preview.260512.1" />
-		<PackageReference Include="Microsoft.Agents.AI.Hosting" Version="1.6.0-preview.260512.1" />
-		<PackageReference Include="Microsoft.Agents.AI.OpenAI" Version="1.6.0" />
-    <PackageReference Include="Microsoft.Agents.AI.Workflows" Version="1.6.0" />
+		<PackageReference Include="Microsoft.Agents.AI.DevUI" Version="1.22.0-preview.260918.1" />
+		<PackageReference Include="Microsoft.Agents.AI.Hosting" Version="1.22.0-preview.260918.1" />
+		<PackageReference Include="Microsoft.Agents.AI.OpenAI" Version="1.22.0" />
+    <PackageReference Include="Microsoft.Agents.AI.Workflows" Version="1.22.0" />
       <!--<PackageReference Include="Microsoft.Agents.AI.Workflows.Generators" Version="1.0.0-rc5">
 		  <PrivateAssets>all</PrivateAssets>
 		  <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
 		</PackageReference>-->
-    <PackageReference Include="Microsoft.Agents.AI.Workflows.Generators" Version="1.6.0">
+    <PackageReference Include="Microsoft.Agents.AI.Workflows.Generators" Version="1.22.0">
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
@@ -34,11 +34,11 @@
 		<PackageReference Include="Azure.AI.OpenAI" Version="2.9.0-beta.1" />
 		<!--<PackageReference Include="Microsoft.Agents.AI.DevUI" Version="1.0.0-preview.260311.1" />-->
 		<!--<PackageReference Include="Microsoft.Extensions.AI" />-->
-    <PackageReference Include="OllamaSharp" Version="5.4.25" />
-    <PackageReference Include="Microsoft.Agents.AI.Anthropic" Version="1.6.0-preview.260512.1" />
-		<PackageReference Include="Spectre.Console" Version="0.55.2" />
-		<PackageReference Include="Spectre.Console.ImageSharp" Version="0.55.2" />
-		<PackageReference Include="Swashbuckle.AspNetCore" Version="10.1.7" />
+    <PackageReference Include="OllamaSharp" Version="5.4.30" />
+    <PackageReference Include="Microsoft.Agents.AI.Anthropic" Version="1.22.0-preview.260918.1" />
+		<PackageReference Include="Spectre.Console" Version="0.57.3-alpha.0.19" />
+		<PackageReference Include="Spectre.Console.ImageSharp" Version="0.57.3-alpha.0.19" />
+		<PackageReference Include="Swashbuckle.AspNetCore" Version="10.2.3" />
 	</ItemGroup>
 
 	<ItemGroup>
@@ -46,7 +46,10 @@
 	</ItemGroup>
 
 	<ItemGroup>
-	  <None Update="Data\Input\input.png">
+	  <None Update="Data\Input\input2.txt">
+	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+	  </None>
+	  <None Update="Data\Input\input2.png">
 	    <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 	  </None>
 		<None Update="Data\Input\input.txt">
@@ -61,10 +64,10 @@
 		<None Update="Data\Instructions\RelationshipsAgent.md">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
-		<None Update="Data\Instructions\MermaidBuilderAgent.md">
+		<None Update="Data\Instructions\[Obsolete]MermaidBuilderAgent.md">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
-		<None Update="Data\Instructions\MermaidRefinerAgent.md">
+		<None Update="Data\Instructions\[Obsolete]MermaidRefinerAgent.md">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 		</None>
 		<None Update="Data\Instructions\ReporterAgent.md">

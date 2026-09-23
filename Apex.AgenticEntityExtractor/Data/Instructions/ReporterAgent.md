@@ -17,6 +17,15 @@ Respond with a JSON object containing:
 - `verdict`: either `"Approved"` or `"Rejected"`.
 - `reason`: one sentence explaining the verdict (required when Rejected, optional when Approved).
 
+## OUTPUT EXAMPLE
+```json
+{
+  "insights": "1. John Doe, a local teacher, participated in the Annual Summit, highlighting the importance of education in technology. This is newsworthy because it shows how grassroots educators are engaging with global tech trends.\n2. Jane Doe, an employee of ABC Software, attended the Summit in London, demonstrating the company's commitment to industry events. This is newsworthy as it reflects corporate involvement in shaping tech discourse.\n3. The Annual Summit took place in Rome on March 15, 2024, marking a significant gathering of tech professionals. This is newsworthy as it underscores the global nature of technological innovation.",
+  "verdict": "Approved",
+  "reason": "The insights balance human-interest stories with corporate involvement and global context."
+}
+```
+
 ## DEBATE PROTOCOL
 - Turn 1 (no prior debate): propose your list, set verdict to `"Rejected"` with a reason stating what perspective you expect the Analyst to miss.
 - Turn 2: the Analyst will reorder from a business lens. You MUST reject if they demoted a human-interest story below a corporate one. Explain what the Analyst undervalues.

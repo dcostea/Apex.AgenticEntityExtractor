@@ -1,29 +1,114 @@
 graph TD
-  e1["event: Amsterdam Tech Conference 2025"]
-  e2["person: Elena"]
-  e3["event: Amsterdam Tech Conference"]
-  e4["temporal: last Thursday"]
-  e5["temporal: November"]
-  e6["person: Dr. Michael Anders"]
-  e7["temporal: next week's"]
-  e8["event: sprint review"]
-  e9["person: James Cooper"]
-  e10["organization: Innovatech Solutions"]
-  e11["location: The Hague"]
-  e12["temporal: 1 Oct 2025"]
-  e13["person: Daniel Costea"]
-  e14["person: Sarah Blunt"]
-  e15["location: Amsterdam Convention Center"]
-  e16["location: Amsterdam"]
+  e1["event: The Odyssey"]
+  e2["person: Homer"]
+  e3["person: Odysseus"]
+  e4["location: Ithaca"]
+  e5["event: Trojan War"]
+  e6["location: Troy"]
+  e7["person: Penelope"]
+  e8["person: Telemachus"]
+  e9["location: Ogygia"]
+  e10["person: Calypso"]
+  e11["person: Athena"]
+  e12["person: Poseidon"]
+  e13["person: Polyphemus"]
+  e14["location: Pylos"]
+  e15["person: Nestor"]
+  e16["location: Sparta"]
+  e17["person: Menelaus"]
+  e18["person: Helen"]
+  e19["location: Olympus"]
+  e20["person: Zeus"]
+  e21["person: Hermes"]
+  e22["location: Scheria"]
+  e23["person: Nausicaa"]
+  e24["organization: Phaeacians"]
+  e25["organization: Cicones"]
+  e26["location: Underworld"]
+  e27["organization: Lotus-Eaters"]
+  e28["organization: Cyclopes"]
+  e29["person: Aeolus"]
+  e30["organization: Laestrygonians"]
+  e31["person: Circe"]
+  e32["person: Tiresias"]
+  e33["person: Helios"]
+  e34["organization: Sirens"]
+  e35["person: Scylla"]
+  e36["person: Charybdis"]
+  e37["person: Eumaeus"]
+  e38["person: Laertes"]
+  e39["event: Odysseus’ Ten-Year Journey Home"]
+  e40["organization: World History Encyclopedia"]
+  e41["person: Peter Struck"]
+  e42["organization: University of Pennsylvania"]
+  e43["location: Cimmerians"]
+  e44["location: Ismarus"]
+  e45["location: Cape Malea"]
+  e46["location: Cythera"]
+  e47["location: Lotophagi"]
+  e48["location: Aeolia"]
+  e49["location: Lamos"]
+  e50["location: Aeaea"]
+  e51["location: Thrinacia"]
+  e52["location: Maris Mediterrenei"]
+  e53["location: Mare Aegeum"]
+  e54["location: Mare Ionium"]
+  e55["location: Mare Tyrrhenum"]
+  e56["location: Mare Adriaticum"]
+  e57["location: Mare Ligusticum"]
+  e58["location: Pontus Euxinus"]
+  e59["location: Mare Ibericum"]
+  e60["temporal: 24 books"]
+  e61["temporal: a decade"]
+  e62["temporal: long after the war"]
+  e63["temporal: years earlier"]
+  e64["temporal: At the opening of the poem"]
+  e65["temporal: first"]
+  e66["temporal: then"]
+  e67["temporal: home"]
+  e68["temporal: later"]
+  e69["temporal: finally"]
+  e70["temporal: By this point"]
+  e71["temporal: Throughout The Odyssey"]
+  e72["temporal: throughout the poem"]
+  e73["temporal: Next"]
+  e74["temporal: immediately"]
+  e75["temporal: Afterward"]
+  e76["temporal: before"]
+  e77["temporal: Soon after"]
+  e78["temporal: At last"]
+  e79["temporal: for years"]
+  e80["temporal: once"]
+  e81["temporal: Even after"]
+  e82["temporal: Only then"]
+  e83["temporal: Ten-Year"]
+  e84["temporal: 7-year"]
 
-  e9 -->|"participates_in"| e3
-  e9 -->|"works_for"| e10
-  e10 -->|"located_at"| e11
-  e3 -->|"occurs_at"| e4
-  e6 -->|"participates_in"| e3
-  e8 -->|"occurs_at"| e7
-  e1 -->|"occurs_at"| e12
-  e3 -->|"located_at"| e16
-  e3 -->|"located_at"| e15
-  e13 -->|"participates_in"| e3
-  e14 -->|"participates_in"| e3
+  e1 -->|"part_of"| e60
+  e3 -->|"located_at"| e4
+  e5 -->|"located_at"| e6
+  e8 -->|"located_at"| e4
+  e3 -->|"located_at"| e9
+  e10 -->|"located_at"| e9
+  e13 -->|"part_of"| e28
+  e8 -->|"located_at"| e14
+  e15 -->|"located_at"| e14
+  e8 -->|"located_at"| e16
+  e17 -->|"located_at"| e16
+  e18 -->|"located_at"| e16
+  e3 -->|"located_at"| e22
+  e23 -->|"located_at"| e22
+  e24 -->|"located_at"| e22
+  e3 -->|"located_at"| e26
+  e32 -->|"located_at"| e26
+  e37 -->|"located_at"| e4
+  e3 -->|"located_at"| e44
+  e25 -->|"located_at"| e44
+  e27 -->|"located_at"| e47
+  e29 -->|"located_at"| e48
+  e30 -->|"located_at"| e49
+  e31 -->|"located_at"| e50
+  e3 -->|"located_at"| e50
+  e33 -->|"located_at"| e51
+  e39 -->|"occurs_at"| e83
+  e41 -->|"works_for"| e42

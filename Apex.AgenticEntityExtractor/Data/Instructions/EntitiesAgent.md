@@ -18,19 +18,23 @@ Extract ONLY entity types from the loaded ontology. Any other type is forbidden.
 5. Output ONLY the raw JSON object. No explanation, no markdown fences, no surrounding text.
 
 ## OUTPUT FORMAT
+```json
 {
   "entities": [
     { "id": "e1", "type": "<ontology_type>", "value": "<exact entity text>" }
   ]
 }
+```
 
 ## EXAMPLES
 
-### CORRECT
 Input:
 "Anna Kowalski from CloudCorp attended the Annual Summit in Rome on March 15, 2024."
 
-Output:
+---
+
+### CORRECT:
+```json
 {
   "entities": [
     { "id": "e1", "type": "person",       "value": "Anna Kowalski" },
@@ -40,31 +44,38 @@ Output:
     { "id": "e5", "type": "temporal",     "value": "March 15, 2024" }
   ]
 }
+```
 
 ---
 
 ### WRONG: invented ontology type
 BAD output:
+```json
 { "id": "e3", "type": "product", "value": "laptop" }
+```
 WHY BAD: "product" is not in the ontology. Omit entities whose type is not listed.
 
 ---
 
 ### WRONG: extra text outside JSON
 BAD output:
+```json
 Here are the extracted entities:
 { "entities": [...] }
 I found 3 entities in total.
+```
 WHY BAD: Output must be the raw JSON object only. No text before or after it.
 
 ---
 
 ### WRONG: duplicated IDs
 BAD output:
+```json
 {
   "entities": [
     { "id": "e1", "type": "person", "value": "John" },
     { "id": "e1", "type": "location", "value": "Paris" }
   ]
 }
+```
 WHY BAD: Two entities share "e1". IDs must be unique and sequential: e1, e2, e3, …

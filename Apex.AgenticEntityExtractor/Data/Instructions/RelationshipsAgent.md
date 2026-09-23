@@ -20,16 +20,19 @@ Extract ONLY relationship types from the loaded ontology. Any other type is forb
 7. Output ONLY the raw JSON object. No explanation, no markdown fences, no surrounding text.
 
 ## OUTPUT FORMAT
+```json
 {
   "relationships": [
     { "id": "r1", "source": "<entity_id>", "relationship": "<ontology_relationship>", "target": "<entity_id>" }
   ]
 }
+```
 
 ## EXAMPLES
 
-### CORRECT
-Entities:
+### INPUT
+Input entities:
+```json
 {
   "entities": [
     { "id": "e1", "type": "person",       "value": "Anna Kowalski" },
@@ -39,11 +42,15 @@ Entities:
     { "id": "e5", "type": "temporal",     "value": "March 15, 2024" }
   ]
 }
+```
 
 Input text:
 "Anna Kowalski from CloudCorp attended the Annual Summit in Rome on March 15, 2024."
 
-Output:
+---
+
+### CORRECT:
+```json
 {
   "relationships": [
     { "id": "r1", "source": "e1", "relationship": "works_for",       "target": "e2" },
@@ -52,19 +59,24 @@ Output:
     { "id": "r4", "source": "e3", "relationship": "occurs_at",       "target": "e5" }
   ]
 }
+```
 
 ---
 
 ### WRONG: invented entity ID
 BAD output:
+```json
 { "id": "r1", "source": "e1", "relationship": "works_for", "target": "e6" }
+```
 WHY BAD: "e6" does not exist in the entities list. Only use IDs from the provided entities.
 
 ---
 
 ### WRONG: invented relationship type
 BAD output:
+```json
 { "id": "r1", "source": "e1", "relationship": "founded_by", "target": "e2" }
+```
 WHY BAD: "founded_by" is not in the ontology. Use only: works_for, located_at, occurs_at, participates_in, part_of.
 
 ---
@@ -74,5 +86,7 @@ Input text: "John works at ACME."
 Entities: e1=John (person), e2=ACME (organization), e3=Paris (location)
 
 BAD output:
+```json
 { "id": "r2", "source": "e1", "relationship": "located_at", "target": "e3" }
+```
 WHY BAD: The text says nothing about John being in Paris. Do not infer what is not stated.
