@@ -83,40 +83,11 @@ internal static class WorkflowConsoleRenderer
     if (imageContent is null)
       return;
 
-    var tempFile = Path.Combine(Path.GetTempPath(), $"aiextract-{Guid.NewGuid():N}.img");
-
-    try
-    {
-      using (var fs = new FileStream(tempFile, FileMode.Create, FileAccess.Write, FileShare.None))
-      {
-        fs.Write(imageContent.Data.Span);
-      }
-      var availableHeight = Math.Max(8, Console.WindowHeight - 8);
-      var heightBoundWidth = Math.Max(24, availableHeight * 2);
-      var image = new CanvasImage(tempFile)
-      {
-        MaxWidth = Math.Max(24, Math.Min(Console.WindowWidth - 10, heightBoundWidth))
-      };
-
-      var panel = new Panel(image)
-        .Header("[blue bold]🖼 Input Image[/]")
-        .BorderColor(Color.Blue)
-        .Expand();
-
-      AnsiConsole.Write(panel);
-      AnsiConsole.WriteLine();
-    }
-    catch (Exception ex)
-    {
-      AnsiConsole.MarkupLine($"[grey]Unable to render input image in console: {Markup.Escape(ex.Message)}[/]");
-    }
-    finally
-    {
-      if (File.Exists(tempFile))
-      {
-        File.Delete(tempFile);
-      }
-    }
+    var panel = new Panel($"[grey]{Markup.Escape(imageContent.MediaType)} ({imageContent.Data.Length:N0} bytes)[/]")
+      .Header("[blue bold]🖼 Input Image Received[/]")
+      .BorderColor(Color.Blue);
+    AnsiConsole.Write(panel);
+    AnsiConsole.WriteLine();
   }
 
   // ════════════════════════════════════════════════════════════════════════
